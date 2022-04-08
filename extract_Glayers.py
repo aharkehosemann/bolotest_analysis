@@ -120,14 +120,10 @@ def calc_chisq_grid(params, data):   # chi-squared parameter space
     return chisq_grid
 
 def calc_func_grid(params, data):   # chi-squared parameter space
-    # ydata, xdata, ysigma = data
     func_grid = np.full((len(params), len(params)), np.nan)
     for rr, row in enumerate(params): 
         for cc, col in enumerate(row):
-            # U, W, I, aU, aW, aI = col
             params_rc = col            
-            # params = U, W, I, aU, aW, aI
-            # ymodel = [G_bolo([coeffs_all[ii], ratios_all[ii]], U, W, I, aU, aW, aI) for ii in np.arange(len(ydata))]
             func_grid[rr, cc] = func_tomin(params_rc, data)
     return func_grid
 
@@ -142,7 +138,6 @@ def run_sim(num_its, p0, ydata, xdata, sigma, bounds1, bounds2, show_yplots=Fals
 
     ### Chi-Squared Min
     chi_result = minimize(calc_chisq, p0, args=[ydata, xdata, sigma], bounds=bounds2)   # fit is unsuccessful and results are nonsense if bounds aren't specified 
-    # chi_result = minimize(calc_chisq, p0, args=[ydata, xdata, sigma])  
     cbounds_met = np.array([bounds2[ii][0]<=chi_result['x'][ii]<=bounds2[ii][1] for ii in np.arange(len(chi_result['x']))]).all()
     if chi_result['success']:       
         U_CS, W_CS, I_CS, aU_CS, aW_CS, aI_CS = chi_result['x']
@@ -336,16 +331,6 @@ def redfunc_tomin(params, p0, data, param):   # reduced function to minimize
 
     return func_tomin(params_topass, data)
 
-# def redfunc_G(params, p0, data, param):   # reduced function to minimize
-    
-#     GU0, GW0, GI0, aU0, aW0, aI0 = p0
-
-#     if param == 'UW': params_topass = [params[0], params[1], GI0, aU0, aW0, aI0]
-#     elif param == 'UI': params_topass = [params[0], GW0, params[1], aU0, aW0, aI0]
-#     elif param == 'WI': params_topass = [GU0, params[0], params[1], aU0, aW0, aI0]
-
-#     return func_tomin(params_topass, data)
-
 def runsim_red(num_its, p0, ydata, xdata, ysigma, bounds, param, show_yplots=False, save_figs=False):   ### MC sim of hand-written function minimization
 
     print('\n'); print('Running Minimization Simulation'); print('\n')
@@ -400,79 +385,6 @@ def runsim_red(num_its, p0, ydata, xdata, ysigma, bounds, param, show_yplots=Fal
     print('alpha_', param, ' = ', round(a_MC, 2), ' +/- ', round(aerr_MC, 2))
     print('')
     return func_params, func_std
-
-def Gfunc(params, p0, data, param):   # reduce params to 1 G value
-        
-    ydata, xdata, sigma = data
-    GU0, GW0, GI0, aU0, aW0, aI0 = p0
-    data_topass = [ydata, xdata, sigma]
-
-    if param == 'U': params_topass = [params, GW0, GI0, aU0, aW0, aI0]
-    elif param == 'W': params_topass = [GU0, params, GI0, aU0, aW0, aI0]
-    elif param == 'I': params_topass = [GU0, GW0, params, aU0, aW0, aI0]
-
-    return func_tomin(params_topass, data_topass)
-
-def afunc(params, p0, data, param):   # reduce params to 1 alpha value
-    
-    ydata, xdata, sigma = data
-    GU0, GW0, GI0, aU0, aW0, aI0 = p0
-    data_topass = [ydata, xdata, sigma]
-
-    if param == 'U': params_topass = [GU0, GW0, GI0, params, aW0, aI0]
-    elif param == 'W': params_topass = [GU0, GW0, GI0, aU0, params, aI0]
-    elif param == 'I': params_topass = [GU0, GW0, GI0, aU0, aW0, params]
-
-    return func_tomin(params_topass, data_topass)
-   
-
-# def runsimred_G(num_its, p0, ydata, xdata, ysigma, bounds, param, show_yplots=False, save_figs=False):   ### MC sim of hand-written function minimization
-
-#     print('\n'); print('Running Minimization Simulation'); print('\n')
-
-#     if param == 'UW': p0red = p0[[0,1]]
-#     elif param == 'UI': p0red = p0[[0,2]]
-#     elif param == 'WI': p0red = p0[[1,2]]
-
-#     func_result = minimize(redfunc_G, p0red, args=(p0, [ydata, xdata, sigma], param), bounds=bounds)
-#     if func_result['success']:       
-#         G1_func, G2_func = func_result['x']
-#     else:
-#         print('Function Min was unsuccessful.'); return
-
-#     pfits_func = np.empty((num_its, 2))
-#     y_its = np.empty((num_its, len(ydata)))
-#     for ii in np.arange(num_its):   # run simulation
-#         y_its[ii] = np.random.normal(ydata, ysigma)   # pull G's from normal distribution characterized by fit error
-#         # func_result = minimize(redfunc_G, p0red, args=(p0, [ydata, xdata, sigma], param), bounds=bounds)
-#         func_result = minimize(redfunc_G, p0red, args=(p0, [y_its[ii], xdata, sigma], param), bounds=bounds)
-#         pfits_func[ii] = func_result['x']
-
-#     if show_yplots:
-#         for yy, yit in enumerate(y_its.T):   # check simulated ydata is a normal dist'n
-#             plt.figure()
-#             plt.hist(yit, bins=20, label='Simulated Data')
-#             plt.axvline(ydata[yy], color='k', linestyle='dashed', label='Measured Value')
-#             plt.legend()
-#             plt.title(bolos[yy])
-#             plt.annotate(r'N$_{iterations}$ = %d'%num_its, (min(yit), 10))
-#             if save_figs: plt.savefig(plot_dir + bolos[yy] + '_simydata.png', dpi=300) 
-        
-#     # sory & print results    
-#     func_params = np.mean(pfits_func, axis=0); func_std = np.std(pfits_func, axis=0)
-#     G1_MC, G2_MC = func_params; G1err_MC, G2err_MC = func_std    # parameter fits / errors from Monte Carlo Function Minimization
-
-#     print('')   # function results 
-#     print('Results from Single Min')
-#     print('G', param[0], ' = ', round(G1_func, 2))
-#     print('G', param[1], ' = ', round(G2_func, 2))
-#     print('')
-#     print('Results from Monte Carlo sim')
-#     print('G', param[0], ' = ', round(G1_MC, 2), ' +/- ', round(G1err_MC, 2))
-#     print('G', param[1], ' = ', round(G2_MC, 2), ' +/- ', round(G2err_MC, 2))
-#     print('')
-#     return func_params, func_std
-    
 
 
 ### Execute Analysis
@@ -608,33 +520,7 @@ if reduce_min:   # troubleshoot minimization by reducing number of parameters
             MC_params, MC_std = runsim_red(n_its, p0, ydata, xdata, sigma, boundsred, param)   # MC Sim 
             x1_MC, x2_MC = MC_params; x1err_MC, x2err_MC =  MC_std    # parameter fits / errors from Monte Carlo Function Minimization
 
-        # elif param == 'UW' or param=='UI' or param=='WI':
-        #     xgridlim=[0,3]; ygridlim=[0,3]   # G_layer vs G_layer 
-        #     xgrid, ygrid = np.mgrid[xgridlim[0]:xgridlim[1]:100j, ygridlim[0]:ygridlim[1]:100j]  
-        #     xlab = 'G'+param[0]
-        #     ylab = 'G'+param[1]
-        #     if param=='UW': 
-        #         pinds = [0,1]
-        #         gridparams = np.array([xgrid, ygrid, p0[2]*np.ones_like(xgrid), p0[3]*np.ones_like(ygrid), p0[4]*np.ones_like(ygrid), p0[5]*np.ones_like(ygrid)]).T
-        #     elif param=='UI': 
-        #         pinds = [0,2]
-        #         gridparams = np.array([xgrid, p0[1]*np.ones_like(xgrid), ygrid, p0[3]*np.ones_like(ygrid), p0[4]*np.ones_like(ygrid), p0[5]*np.ones_like(ygrid)]).T
-        #     elif param=='WI': 
-        #         pinds = [1,2]
-        #         gridparams = np.array([p0[0]*np.ones_like(ygrid), xgrid, ygrid, p0[3]*np.ones_like(ygrid), p0[4]*np.ones_like(ygrid), p0[5]*np.ones_like(ygrid)]).T
-
-        #     p0red = p0[pinds]
-        #     res_single = minimize(redfunc_G, p0red, args=(p0, data, param), bounds=boundsred) 
-        #     if res_single['success']:       
-        #         x1_single, x2_single = res_single['x']
-        #     else:
-        #         print(param + 'Min was unsuccessful.')
-
-        #     MC_params, MC_std = runsimred_G(n_its, p0, ydata, xdata, sigma, boundsred, param)   # MC Sim 
-        #     x1_MC, x2_MC = MC_params; x1err_MC, x2err_MC =  MC_std   # parameter fits / errors from Monte Carlo Function Minimization
-    
         else:
-            # print('Invalid parameter choice. Available choices: U, W, I, UW, UI, WI')
             print('Invalid parameter choice. Available choices: U, W, I')
 
         funcgrid = calc_func_grid(gridparams, data)   # Grid for Quality Plots
@@ -660,10 +546,6 @@ if reduce_min:   # troubleshoot minimization by reducing number of parameters
     U_single, U_MC, Uerr_MC = overplot_qp(p0, data, boundsred, n_its, fits_J, 'U', full_res=full_res, savefigs=save_figs)
     W_single, W_MC, Werr_MC = overplot_qp(p0, data, boundsred, n_its, fits_J, 'W', full_res=full_res, savefigs=save_figs)
     I_single, I_MC, Ierr_MC = overplot_qp(p0, data, boundsred, n_its, fits_J, 'I', full_res=full_res, savefigs=save_figs)
-    # UW_single, UW_MC, UWerr_MC = overplot_qp(p0, data, boundsred, n_its, fits_J, 'UW', savefigs=save_figs)
-    # UI_single, UI_MC, UIerr_MC = overplot_qp(p0, data, boundsred, n_its, fits_J, 'UI', savefigs=save_figs)
-    # WI_single, WI_MC, WIerr_MC = overplot_qp(p0, data, boundsred, n_its, fits_J, 'WI', savefigs=save_figs)
-
 
 if single_param:   # troubleshoot minimization by reducing number of parameters
 
