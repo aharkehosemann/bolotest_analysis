@@ -1,17 +1,16 @@
-# Reanalyze bolotest data from 2018 (?)
-# AHHH 2020/12
-#
-# to do: add errors; save power law fit figures; fix SC branch of IVs; second y axis on Psat plot
-# automated error analysis: baseline removal tes-by-tes basis scipy.signal.sabgal_filter
-
-
 import numpy as np 
 import matplotlib.pyplot as plt
 import pickle as pkl
 import tesanalyze_ahhh
 import pdb
 import csv 
-import pickle as pkl
+
+# Reanalyze bolotest data from 2018 (?)
+# AHHH 2020/12
+#
+# to do: add errors; save power law fit figures; fix SC branch of IVs; second y axis on Psat plot
+# automated error analysis: baseline removal tes-by-tes basis scipy.signal.sabgal_filter
+
 
 def G_atT(T, k, n):   # calculate thermal conductance at temperature T (in K)
     return n*k*T**(n-1)
