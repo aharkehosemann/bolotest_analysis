@@ -23,13 +23,12 @@ Raw chi-squared value of five-layer is 32.0, six-layer is 34.6, so five-layer is
 Not sure if looking at significance is useful because we aren't hypothesis testing and have very small DOF. 
 
 TODO: look at bolo1b Gtotal values 
-
 """
 
 ### User Switches
 # which analysis?
 runsim_allthree = False   # do minimizaion routines n_its times
-runsim_func = False   # for debugging simulation
+runsim_justfunc = False   # for debugging simulation
 random_initguess = False   # try simulation with randomized initial guesses
 quality_plots = True   # map G_x vs alpha_x space, plot full sim results + Joel's results + two-param results + single value results
 average_qp = False   # show average value for 2D quality plot over MC sim to check for scattering
@@ -89,7 +88,7 @@ data = [ydata, xdata, sigma]
 if runsim_allthree:   # run simulation for all three minimization routines
     LS_params, LS_std, CS_params, CS_std, func_params, func_std = run_sim(n_its, p0, data, bounds1, bounds2, plot_dir, show_yplots=show_plots, fn_comments=fn_comments, save_figs=save_figs)
 
-if runsim_func:   # run simulation with just hand-written function
+if runsim_justfunc:   # run simulation with just hand-written function
     func_params_test, func_std_test = runsim_func(n_its, p0, ydata, xdata, sigma, bounds1, bounds2, show_yplots=show_plots, save_figs=save_figs)
     func_params_test_J, func_std_test_J = runsim_func(n_its, p0, ydata_J, xdata, sigma_J, bounds1, bounds2, show_yplots=show_plots, save_figs=save_figs)
 
