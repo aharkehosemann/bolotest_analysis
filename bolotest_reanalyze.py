@@ -22,15 +22,10 @@ def sigma_power(i, sigma_i, v, sigma_v):   # calculate error in power measuremen
     # return np.sqrt(i**2*sigma_v**2 + v**2*sigma_i**2)   # sigma_power^2 = (I*sigma_V)^2 + (V*sigma_I)^2
     return np.sqrt(np.multiply(i**2,sigma_v**2) + np.multiply(v**2,sigma_i**2))   # sigma_power^2 = (I*sigma_V)^2 + (V*sigma_I)^2
 
-# plt.rcParams["font.family"] = "fantasy"   # fantasy gives comic sans
-# plt.rcParams['text.usetex'] = True
-# plt.rcParams.update({
-#     # 'text.usetex': True,
-#     'font.family': 'fantasy',
-#     'font.fantasy': ['Comic Sans']}
+
 
 ### user params
-analyze_ivs = True
+analyze_ivs = False
 save_data = False   # save csv and pkl
 save_figs = False   
 
@@ -39,6 +34,7 @@ plot_byind = False   # for easier IV exclusion
 plot_noisyivs = False
 plot_mbolos = False
 save_pad18 = False   # write quick CSV for Joel
+scaleG = True
 
 analysis_dir = '/Users/angi/NIS/Analysis/bolotest/'
 dfiles = ['/Users/angi/NIS/MM2017L_20171117_data/AY_1thru15_IVvsTb.pkl', '/Users/angi/NIS/MM2017L_20171117_data/AX_16thru30_IVvsTb.pkl']
@@ -362,3 +358,26 @@ if save_pad18: # send P and T values for pad 18, bolo 20
         csvwriter.writerow(fields)  
         csvwriter.writerows(rows1)
         csvwriter.writerows(rows2)
+
+if scaleG:
+
+    def scale_G(T, GTc, Tc, n):
+        return GTc * T**(n-1)/Tc**(n-1)
+
+    def sigma_GscaledT(T, GTc, Tc, n, sigma_GTc, sigma_Tc, sigma_n):
+        Gterm = sigma_GTc * T**(n-1)/(Tc**(n-1))
+        Tcterm = sigma_Tc * GTc * (1-n) * T**(n-1)/(Tc**(n-1))   # this is very tiny
+        nterm = sigma_n * GTc * T**(n-1)/(Tc**(n-1)) * (np.log(T)-np.log(Tc))
+        return np.sqrt( Gterm**2 + Tcterm**2 + nterm**2 )   # quadratic sum of sigma G(Tc), sigma Tc, and sigma_n terms
+
+    Tcs = np.array([170.9877185, 170.9706609, 171.7552114, 171.7208656, 171.2176826, 170.9077816, 171.3470285, 171.0853375, 170.9200613, 171.060197, 170.0255488, 171.021025, 171.2850107, 170.4034122, 171.2042771, 170.2338939, 170.6389945, 172.0684101, 170.3518396, 171.721552, 171.5840882, 171.1586009, 170.8315709, 172.2051357, 171.7151257])
+    sigma_Tcs = np.array([0.010421243, 0.009226958, 0.010790079, 0.009281995, 0.006323179, 0.009746988, 0.010994352, 0.009444727, 0.007650692, 0.005877343, 0.017378697, 0.009453003, 0.009177113, 0.021876877, 0.006768265, 0.006364612, 0.018369732, 0.012367842, 0.020356169, 0.007980188, 0.013312168, 0.006793048, 0.014202084, 0.009438768, 0.009855968])
+    ns = np.array([2.102652493, 2.286305877, 2.181787081, 2.636751655, 3.625212281, 2.065019714, 2.030684323, 2.310936272, 2.271596966, 3.713230268, 2.05911454, 2.183641919, 2.389944922, 1.892766183, 3.29595625, 2.328520321, 2.105820885, 2.208529433, 1.994745782, 3.402832364, 2.135441834, 3.025155869, 2.821070825, 3.025157842, 2.816065888])
+    sigma_ns = np.array([2.102652493, 2.286305877, 2.181787081, 2.636751655, 3.625212281, 2.065019714, 2.030684323, 2.310936272, 2.271596966, 3.713230268, 2.05911454, 2.183641919, 2.389944922, 1.892766183, 3.29595625, 2.328520321, 2.105820885, 2.208529433, 1.994745782, 3.402832364, 2.135441834, 3.025155869, 2.821070825, 3.025157842, 2.816065888])
+    GTcs = np.array([7.063630682, 8.23553356, 10.31889778, 13.74098652, 21.98669484, 6.659975444, 7.601344581, 8.013653731, 10.63671194, 22.09412114, 4.67333846, 7.904637521, 10.03001622, 3.471988312, 16.47703326, 5.184876564, 5.196919583, 8.268319188, 3.703848367, 16.79390843, 5.659883891, 15.11216746, 10.07493674, 15.49026988, 10.44634148])
+    sigma_GTcs = np.array([0.102018534, 0.112406438, 0.131803919, 0.171320173, 0.239205548, 0.092635138, 0.104237744, 0.1090491, 0.124941174, 0.238423651, 0.08774709, 0.108691126, 0.130040288, 0.072825133, 0.198879142, 0.078156549, 0.092319898, 0.113998559, 0.074520238, 0.204577595, 0.090894549, 0.167780174, 0.164340968, 0.18151003, 0.147841826])
+
+    Tscale = .170
+    scaledGs = scale_G(Tscale, GTcs, Tcs/1E3, ns)  # pW/K
+    sigma_scaledGs = sigma_GscaledT(Tscale, GTcs, Tcs/1E3, ns, sigma_GTcs, sigma_Tcs/1E3, sigma_ns)
+
