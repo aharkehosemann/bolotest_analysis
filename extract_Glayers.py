@@ -28,9 +28,11 @@ Previously G(microstrip) was scaled by leg width/7 for lw<7um and was the same v
 
 2023/04/19: sigma_current in IV has been overestimated by a couple orders of magnitude (was not subtracting line fit in normal branch). Reran sim with this correction on 5/5.  
 
-2023/05/10: n term in sigma_G calculation was missing a component and is now expected to dominate sigma_G.    
+2023/05/10: n term in sigma_G calculation was missing a component and is now expected to dominate sigma_G. 
 
-TODO: redo six-layer fit to compare chi-squared and WLS values?; is NA correct in calculation of C_V?
+2023/06/05: actually actually, what we were calling chi-squared values then weighted least squared values really is chi-squared 
+
+TODO: redo six-layer fit to compare chi-squared values?; is NA correct in calculation of C_V?
 """
 from bolotest_routines import *
 from scipy.optimize import fsolve
@@ -39,7 +41,7 @@ import csv
 
 ### User Switches
 # choose analysis
-run_sim = True   # run MC simulation for fitting model
+run_sim = False   # run MC simulation for fitting model
 quality_plots = True   # results on G_x vs alpha_x parameter space for each layer
 random_initguess = False   # try simulation with randomized initial guesses
 average_qp = False   # show average value for 2D quality plot over MC sim to check for scattering
@@ -50,13 +52,13 @@ load_and_plot = False   # scrap; currently replotting separate quality plots int
 scrap = False
 
 # options
-save_figs = True   
-save_sim = True   # save full simulation
-save_csv = True   # save csv file of resulting parameters
+save_figs = False   
+save_sim = False   # save full simulation
+save_csv = False   # save csv file of resulting parameters
 show_plots = True   # show simulated y-data plots during MC simulation
 calc_Gwire = False   # calculate G of the wiring stack if it wasn't saved during the simulation
 latex_fonts = True
-
+vmax = 2E3   # quality plot scaling
 
 n_its = int(1E4)   # number of iterations for MC simulation
 num_guesses = 100   # number of randomized initial guesses to try
@@ -66,14 +68,21 @@ analysis_dir = '/Users/angi/NIS/Bolotest_Analysis/'
 # fn_comments = '_alpha0inf_1E4iterations_updatednterminGerror'   # corrected n term
 # fn_comments = '_alpha0inf_1E4iterations_noPerror'   # fitter does not know P measurement error
 # fn_comments = '_alpha0inf_1E4iteratinos_firsterror'   # first go at getting errors, incorrect sigma_I (mean not subtracted from and n-term in sigma_G)
-fn_comments = '_alpha0inf_1E4iteratinos_firsterror_recalculatedsigmaGTES'   # first go at getting errors, errors pulled from _errorcompare_master, incorrect sigma_I (mean not subtracted from and n-term in sigma_G)
+# fn_comments = '_alpha0inf_1E4iteratinos_firsterror_recalculatedsigmaGTES'   # first go at getting errors, errors pulled from _errorcompare_master, incorrect sigma_I (mean not subtracted from and n-term in sigma_G)
 # fn_comments = '_alpha0inf_1E4iterations_wrongsigmaI'   # incorrect sigma_I
 # fn_comments = '_alpha0inf_1E4iterations_wrongsigmaG_3ndrun'   # correct sigma_i, incorrect sigma_G n-term
 # fn_comments = '_alpha0inf_1E5iterations_wrongsigmaG'   # correct sigma_i, incorrect sigma_G n-term
 # fn_comments = '_alpha0ainf_1E4iterations_corrsigmaG_2ndrun'   # corrected n term, pretty stable run to run
 # fn_comments = '_alpha0inf_1E4iterations_nobling'   # corrected n term and exclude extra bling bolos
+# fn_comments = '_alpha0inf_1E4iteratinos_firsterror_fitkconstantTTESresults'   # first go at getting errors, errors pulled from _errorcompare_master, incorrect sigma_I (mean not subtracted from and n-term in sigma_G)
+# fn_comments = '_alpha0inf_1E4iteratinos_firsterror_fitkconstantTTESresults_nobling'   # first go at getting errors, errors pulled from _errorcompare_master, incorrect sigma_I (mean not subtracted from and n-term in sigma_G)
+# fn_comments = '_alpha0inf_1E4iterations_fitkconstantTTES'   # first go at getting errors, errors pulled from _errorcompare_master, incorrect sigma_I (mean not subtracted from and n-term in sigma_G)
+# fn_comments = '_alpha0inf_1E4iteratinos_fitGconstantTTES'   # first go at getting errors, errors pulled from _errorcompare_master, incorrect sigma_I (mean not subtracted from and n-term in sigma_G)
+# fn_comments = '_alpha0inf_1E4iteratinos_fitkconstantTTES_nobling'   # first go at getting errors, errors pulled from _errorcompare_master, incorrect sigma_I (mean not subtracted from and n-term in sigma_G)
+fn_comments = '_alpha0inf_1E4iteratinos_fitGconstantTTES_nobling_constrained'   # first go at getting errors, errors pulled from _errorcompare_master, incorrect sigma_I (mean not subtracted from and n-term in sigma_G)
+# fn_comments = '_alpha0inf_1E4iteratinos_fitGconstantTTES_nobling'   # first go at getting errors, errors pulled from _errorcompare_master, incorrect sigma_I (mean not subtracted from and n-term in sigma_G)
 plot_comments = ''
-alim = [0,np.inf]   # limits for fitting alpha
+alim = [0, np.inf]   # limits for fitting alpha
 # alim = [0,1]   # limits for fitting alpha
 L = 220   # TES leg length, um
 A_U = 7*420E-3; A_W = 5*400E-3; A_I = 7*400E-3  # Area of film on one leg,um^2
@@ -88,21 +97,29 @@ p0 = p0_a0inf_median;# sigma_p0 = sigmap0_a0inf_median
 # choose data to use
 # ydata_Tc = np.array([11.7145073, 4.921841228, 8.077815536, 10.03001622, 16.63099617, 5.386790491, 15.2863792, 3.585251305])   # pW/K at Tc, most were weighted averages*; bolo 1b*, 24*, 23*, 22, 21*, 20*, 7*, 13*; bolo1b is weighted average (not sure we trust row 10)
 # sigma_Tc = np.array([0.100947739, 0.063601732, 0.078665632, 0.130040288, 0.142600818, 0.059261252, 0.123206779, 0.052084114])   # pW/K at Tc; bolo 1b*, 24*, 23*, 22, 21*, 20*, 7*, 13*
-ydata_170mK_noPerr = [13.87604963, 5.11402462, 8.285371853, 10.28612903, 16.69684211, 5.501194508, 15.48321544, 3.576823158]   # pW/K at 170 mK fit without P error, most were weighted averages*; bolo 1b*, 24*, 23*, 22, 21*, 20*, 7*, 13* (only using row 5 value of bolo1b)
-sigma_170mK_noPerr = [0.814944269, 0.218018499, 0.29514379, 0.620991797, 1.09788405, 0.175358636, 1.054916235, 0.090860025]
+# ydata_170mK_noPerr = [13.87604963, 5.11402462, 8.285371853, 10.28612903, 16.69684211, 5.501194508, 15.48321544, 3.576823158]   # pW/K at 170 mK fit without P error, most were weighted averages*; bolo 1b*, 24*, 23*, 22, 21*, 20*, 7*, 13* (only using row 5 value of bolo1b)
+# sigma_170mK_noPerr = [0.814944269, 0.218018499, 0.29514379, 0.620991797, 1.09788405, 0.175358636, 1.054916235, 0.090860025]
 # ydata_170mK_witherr = [13.51632171, 4.889791292, 7.929668225, 9.925580294, 16.27276237, 5.27649525, 14.95079826, 3.577979915]   # pW/K at 170 mK with full G temp scaling error analysis, pulled from _witherrors spreadsheet, most were weighted averages*; bolo 1b*, 24*, 23*, 22, 21*, 20*, 7*, 13* (only using row 5 value of bolo1b)
 # sigma_170mK_witherr = [0.396542, 0.08774166, 0.148831461, 0.22016008, 0.411908086, 0.079748858, 0.340424395, 0.074313687]
-ydata_170mK_witherr = [13.51632171, 4.889791292, 7.929668225, 9.925580294, 16.27276237, 5.27649525, 14.95079826, 3.577979915]   # pW/K at 170 mK with full G temp scaling error analysis, errors calculated in _errorcompare_master, most were weighted averages*; bolo 1b*, 24*, 23*, 22, 21*, 20*, 7*, 13* (only using row 5 value of bolo1b)
-sigma_170mK_witherr = [0.396542, 0.066131706, 0.127251408, 0.22016008, 0.34608384, 0.069631337, 0.302880201, 0.053104708]
-ydata_170mK_wrongsigmaI = [13.51321747, 4.93174278, 8.000974716, 9.917328335, 16.32689035, 5.348468327, 15.00602246, 3.577102069]   # pW/K at 170 mK with full G temp scaling error analysis, most were weighted averages*; bolo 1b*, 24*, 23*, 22, 21*, 20*, 7*, 13* (only using row 5 value of bolo1b)
-sigma_170mK_wrongsigmaI = [34.762719, 12.42239969, 15.1839926, 26.51034923, 25.99331922, 10.8398234, 22.41338756, 9.70233484]
-ydata_170mK_wrongsigmaG = [13.24451089, 5.000777852, 7.960183617, 9.833994168, 15.72463397, 5.254644954, 14.31984759, 3.577102069]   # pW/K at 170 mK with corrected current noise measurement, weighted averages*; bolo 1b*, 24*, 23*, 22, 21*, 20*, 7*, 13* (only using row 5 value of bolo1b)
-sigma_170mK_wrongsigmaG = [0.381955399, 0.063312254, 0.08912874, 0.181640644, 0.383600005, 0.058708221, 0.44963107, 0.043775235]
-ydata_170mK_corrsigmaG = [13.24451089, 4.999984304, 7.960081461, 9.833994168, 15.72503124, 5.257487318, 14.31854675, 3.581627355]   # pW/K at 170 mK with fixed n term in GTES error, most were weighted averages*; bolo 1b*, 24*, 23*, 22, 21*, 20*, 7*, 13* (only using row 5 value of bolo1b)
-sigma_170mK_corrsigmaG = [0.49306722, 0.078336521, 0.112242869, 0.231738644, 0.50525562, 0.073826253, 0.58107854, 0.053441225]
-ydata_170mK_nobling = [13.24451089, 4.668924466, 7.830962629, 9.833994168, 15.57684727, 5.198992752, 14.31854675, 3.460230096]   # pW/K at 170 mK with fixed n term in GTES error, weighted average only on 7 (second vals have extra bling); bolo 1b, 24, 23, 22, 21, 20, 7*, 13 
-sigma_170mK_nobling = [0.49306722, 0.142644772, 0.17760485, 0.231738644, 0.808761146, 0.080176748, 0.58107854, 0.076007386]
-ydata = np.array(ydata_170mK_witherr); sigma = np.array(sigma_170mK_witherr)
+# ydata_170mK_witherr = [13.51632171, 4.889791292, 7.929668225, 9.925580294, 16.27276237, 5.27649525, 14.95079826, 3.577979915]   # pW/K at 170 mK with full G temp scaling error analysis, errors calculated in _errorcompare_master, most were weighted averages*; bolo 1b*, 24*, 23*, 22, 21*, 20*, 7*, 13* (only using row 5 value of bolo1b)
+# sigma_170mK_witherr = [0.396542, 0.066131706, 0.127251408, 0.22016008, 0.34608384, 0.069631337, 0.302880201, 0.053104708]
+# ydata_170mK_wrongsigmaI = [13.51321747, 4.93174278, 8.000974716, 9.917328335, 16.32689035, 5.348468327, 15.00602246, 3.577102069]   # pW/K at 170 mK with full G temp scaling error analysis, most were weighted averages*; bolo 1b*, 24*, 23*, 22, 21*, 20*, 7*, 13* (only using row 5 value of bolo1b)
+# sigma_170mK_wrongsigmaI = [34.762719, 12.42239969, 15.1839926, 26.51034923, 25.99331922, 10.8398234, 22.41338756, 9.70233484]
+# ydata_170mK_wrongsigmaG = [13.24451089, 5.000777852, 7.960183617, 9.833994168, 15.72463397, 5.254644954, 14.31984759, 3.577102069]   # pW/K at 170 mK with corrected current noise measurement, weighted averages*; bolo 1b*, 24*, 23*, 22, 21*, 20*, 7*, 13* (only using row 5 value of bolo1b)
+# sigma_170mK_wrongsigmaG = [0.381955399, 0.063312254, 0.08912874, 0.181640644, 0.383600005, 0.058708221, 0.44963107, 0.043775235]
+# ydata_170mK_corrsigmaG = [13.24451089, 4.999984304, 7.960081461, 9.833994168, 15.72503124, 5.257487318, 14.31854675, 3.581627355]   # pW/K at 170 mK with fixed n term in GTES error, most were weighted averages*; bolo 1b*, 24*, 23*, 22, 21*, 20*, 7*, 13* (only using row 5 value of bolo1b)
+# sigma_170mK_corrsigmaG = [0.49306722, 0.078336521, 0.112242869, 0.231738644, 0.50525562, 0.073826253, 0.58107854, 0.053441225]
+# ydata_170mK_nobling = [13.24451089, 4.668924466, 7.830962629, 9.833994168, 15.57684727, 5.198992752, 14.31854675, 3.460230096]   # pW/K at 170 mK with fixed n term in GTES error, weighted average only on 7 (second vals have extra bling); bolo 1b, 24, 23, 22, 21, 20, 7*, 13 
+# sigma_170mK_nobling = [0.49306722, 0.142644772, 0.17760485, 0.231738644, 0.808761146, 0.080176748, 0.58107854, 0.076007386]
+# ydata_fitkconstTTES = [13.95595194, 5.180700247, 8.145842767, 10.11727864, 17.50724267, 5.648101525, 15.94041907, 3.679914362]   # pW/K at 170 mK with fixed n term in GTES error, weighted average only on 7 (second vals have extra bling); bolo 1b, 24, 23, 22, 21, 20, 7*, 13 
+# sigma_fitkconstTTES = [1.027613389, 0.155053601, 0.219139618, 0.467419093, 1.200372718, 0.153053379, 1.439783275, 0.100790428]
+# ydata_fitkconstTTES_nobling = [13.95595194, 4.721712491, 7.897129469, 10.11727864, 17.22593552, 5.657104524, 15.94041907, 3.513915609]   # pW/K at 170 mK with fixed n term in GTES error, weighted average only on 7 (second vals have extra bling); bolo 1b, 24, 23, 22, 21, 20, 7*, 13 
+# sigma_fitkconstTTES_nobling = [1.027613389, 0.265183128, 0.335912651, 0.467419093, 1.89750536, 0.169576323, 1.439783275, 0.139127518]
+# ydata_fitGexplicit = [13.95595194, 5.235218152, 8.182147122, 10.11727864, 17.47817158, 5.653424631, 15.94469664, 3.655108238]   # pW/K at 170 mK fitting for G explicitly, weighted average only on 7 (second vals have extra bling); bolo 1b, 24, 23, 22, 21, 20, 7*, 13 
+# sigma_fitGexplicit = [0.073477411, 0.01773206, 0.021512022, 0.04186006, 0.067666665, 0.014601341, 0.083450365, 0.013604177]   # fitting for G explicitly produces very small error bars
+ydata_fitGexplicit_nobling = [13.95595194, 4.721712381, 7.89712938, 10.11727864, 17.22593561, 5.657104443, 15.94469664, 3.513915367]   # pW/K at 170 mK fitting for G explicitly, weighted average only on 7; bolo 1b, 24, 23, 22, 21, 20, 7*, 13 
+sigma_fitGexplicit_nobling = [0.073477411, 0.034530085, 0.036798694, 0.04186006, 0.09953389, 0.015188074, 0.083450365, 0.01762426]
+ydata = np.array(ydata_fitGexplicit_nobling); sigma = np.array(sigma_fitGexplicit_nobling)
 
 bolos = np.array(['bolo 1b', 'bolo 24', 'bolo 23', 'bolo 22', 'bolo 21', 'bolo 20', 'bolo 7', 'bolo 13'])
 bounds = [(0, np.inf), (0, np.inf), (0, np.inf), (alim[0], alim[1]), (alim[0], alim[1]), (alim[0], alim[1])]   # bounds for 6 fit parameters: G_U, G_W, G_I, alpha_U, alpha_W, alpha_I
@@ -132,7 +149,7 @@ if latex_fonts:   # fonts for paper plots
 
 ### Execute Analysis
 if run_sim:   # run simulation with just hand-written function
-    sim_results = runsim_WLS(n_its, p0, data, bounds, plot_dir, show_yplots=show_plots, save_figs=save_figs, save_sim=save_sim, sim_file=sim_file, fn_comments=fn_comments)  
+    sim_results = runsim_chisq(n_its, p0, data, bounds, plot_dir, show_yplots=show_plots, save_figs=save_figs, save_sim=save_sim, sim_file=sim_file, fn_comments=fn_comments)  
 
 
 if quality_plots:   # plot G_x vs alpha_x parameter space with various fit results
@@ -150,13 +167,13 @@ if quality_plots:   # plot G_x vs alpha_x parameter space with various fit resul
     Gwire_mean = np.mean(Gwires); Gwire_median = np.median(Gwires); sigma_Gwire = np.std(Gwires)
 
     if np.isinf(alim[1]):   # quality plot title
-        qp_title = '$\\boldsymbol{\\mathbf{\\alpha \\in [0,\infty)}}$\\textbf{ (Mean)}'   # title for 1x3 quality plots
+        qp_title = '$\\boldsymbol{\\mathbf{\\alpha \\in [0,\infty)}}$'   # title for 1x3 quality plots
+        # qp_title = '$\\boldsymbol{\\mathbf{\\alpha \\in [0,\infty)}}$\\textbf{ (Mean)}'   # title for 1x3 quality plots
     else:
         qp_title = '$\\boldsymbol{\\mathbf{\\alpha \in [0,'+str(alim[1])+']}}$'   # title for 1x3 quality plots
 
     ### plot fit in 2D parameter space
-    fn_comments2 = fn_comments+'_mean'
-    qualityplots(data, params_mean, plot_dir=plot_dir, save_figs=save_figs, fn_comments=fn_comments2, title=qp_title)
+    qualityplots(data, params_mean, plot_dir=plot_dir, save_figs=save_figs, fn_comments=fn_comments+'_mean', title=qp_title+'\\textbf{ (Mean)}', vmax=vmax)
 
     ### calculate thermal conductivities
     print ('\n\nResults taking mean values of fit parameters:')
@@ -176,23 +193,13 @@ if quality_plots:   # plot G_x vs alpha_x parameter space with various fit resul
     print('Kappa_I: ', round(kappaI_mean, 2), ' +/- ', round(sigkappaI_mean, 2), ' pW/K/um')
     print('G_wire = ', round(Gwire_mean, 2), ' +/- ', round(sigma_Gwire, 2), 'pW/K')
 
-    WLS_fit = WLS_val(params_mean[0], data)
-    print('WLS value for the fit: ', round(WLS_fit, 3)) 
-    chisq_fit = calc_chisq(ydata, Gbolos(params_mean[0]))
-    print('Chi-squared value for the fit: ', round(chisq_fit, 3))
-    vals_mean = np.array([params_mean[0][0], params_mean[0][1], params_mean[0][2], params_mean[0][3], params_mean[0][4], params_mean[0][5], kappaU_mean, kappaW_mean, kappaI_mean, Gwire_mean, WLS_fit, chisq_fit])
-    vals_err = np.array([params_mean[1][0], params_mean[1][1], params_mean[1][2], params_mean[1][3], params_mean[1][4], params_mean[1][5], sigkappaU_mean, sigkappaW_mean, sigkappaI_mean, sigma_Gwire, '', ''])   # should be the same for mean and median
+    chisq_fit = chisq_val(params_mean[0], data)
+    print('Chi-squared value for the fit: ', round(chisq_fit, 3)) 
+    vals_mean = np.array([params_mean[0][0], params_mean[0][1], params_mean[0][2], params_mean[0][3], params_mean[0][4], params_mean[0][5], kappaU_mean, kappaW_mean, kappaI_mean, Gwire_mean, chisq_fit])
+    vals_err = np.array([params_mean[1][0], params_mean[1][1], params_mean[1][2], params_mean[1][3], params_mean[1][4], params_mean[1][5], sigkappaU_mean, sigkappaW_mean, sigkappaI_mean, sigma_Gwire, ''])   # should be the same for mean and median
 
     print ('\n\nResults taking median values of fit parameters:')
-    if np.isinf(alim[1]):   # quality plot title
-        qp_title = '$\\boldsymbol{\\mathbf{\\alpha \\in [0,\infty)}}\\textbf{ (Median)}$'   # title for 1x3 quality plots
-    else:
-        qp_title = '$\\boldsymbol{\\mathbf{\\alpha \in [0,'+str(alim[1])+']}}$'   # title for 1x3 quality plots
-
-
-    ### plot fit in 2D parameter space using median values
-    fn_comments3 = fn_comments+'_median'
-    qualityplots(data, params_median, plot_dir=plot_dir, save_figs=save_figs, fn_comments=fn_comments3, title=qp_title)
+    qualityplots(data, params_median, plot_dir=plot_dir, save_figs=save_figs, fn_comments=fn_comments+'_median', title=qp_title+'\\textbf{ (Median)}', vmax=vmax)
 
     ### calculate thermal conductivities
     GmeasU_med, GmeasW_med, GmeasI_med, alphaU_med, alphaW_med, alphaI_med = params_median[0]; sigGU, sigGW, sigGI, sigalphaU, sigalphaW, sigalphaI = params_median[1]
@@ -211,15 +218,18 @@ if quality_plots:   # plot G_x vs alpha_x parameter space with various fit resul
     print('Kappa_I: ', round(kappaI_med, 2), ' +/- ', round(sigkappaI_med, 2), ' pW/K/um')
     print('G_wire = ', round(Gwire_median, 2), ' +/- ', round(sigma_Gwire, 2), 'pW/K')
 
-    WLS_fit = WLS_val(params_median[0], data)
-    print('WLS value for the fit: ', round(WLS_fit, 3))   
-    chisq_fit = calc_chisq(ydata, Gbolos(params_median[0]))
-    print('Chi-squared value for the fit: ', round(chisq_fit, 3))
-    vals_med = np.array([params_median[0][0], params_median[0][1], params_median[0][2], params_median[0][3], params_median[0][4], params_median[0][5], kappaU_med, kappaW_med, kappaI_med, Gwire_median, WLS_fit, chisq_fit])
+    chisq_fit = chisq_val(params_median[0], data)
+    print('Chi-squared value for the fit: ', round(chisq_fit, 3))   
+    vals_med = np.array([params_median[0][0], params_median[0][1], params_median[0][2], params_median[0][3], params_median[0][4], params_median[0][5], kappaU_med, kappaW_med, kappaI_med, Gwire_median, chisq_fit])
+    param_labels = ['G$_U$', 'G$_W$', 'G$_I$', '$\\alpha_U$', '$\\alpha_W$', '$\\alpha_I$']
+    
+    # pairwise correlation plots
+    pairfig = pairwise(sim_data.T, param_labels, title=qp_title, save_figs=save_figs, plot_dir=plot_dir, fn_comments=fn_comments)
+
 
     if save_csv:
         # write CSV     
-        csv_params = np.array(['GU (pW/K)', 'GW (pW/K)', 'GI (pW/K)', 'alphaU', 'alphaW', 'alphaI', 'kappaU (pW/K/um)', 'kappaW (pW/K/um)', 'kappaI (pW/K/um)', 'Gwire (pW/K)', 'WLS val', 'Chi-sq val'])
+        csv_params = np.array(['GU (pW/K)', 'GW (pW/K)', 'GI (pW/K)', 'alphaU', 'alphaW', 'alphaI', 'kappaU (pW/K/um)', 'kappaW (pW/K/um)', 'kappaI (pW/K/um)', 'Gwire (pW/K)', 'Chi-sq val'])
         fields = np.array(['Parameter', 'Mean', 'Median', 'Error'])  
         rows = [[csv_params[rr], vals_mean[rr], vals_med[rr], vals_err[rr]] for rr in np.arange(len(csv_params))]
         with open(csv_file, 'w') as csvfile:  
@@ -662,7 +672,7 @@ if load_and_plot:   # for loading a simulation and replotting things; kinda scra
     Gwires = G_wirestack(sim_data.T)
     Gwire = np.median(Gwires); Gwire_std = np.std(Gwires)   # take median value instead of mean
 
-    print('Results from Monte Carlo Sim - WLS Min')
+    print('Results from Monte Carlo Sim - chisq Min')
     print('G_U(420 nm) = ', round(Gmeas_U, 2), ' +/- ', round(sigGU, 2), 'pW/K')
     print('G_W(400 nm) = ', round(Gmeas_W, 2), ' +/- ', round(sigGW, 2), 'pW/K')
     print('G_I(400 nm) = ', round(Gmeas_I, 2), ' +/- ', round(sigGI, 2), 'pW/K')
@@ -682,11 +692,11 @@ if load_and_plot:   # for loading a simulation and replotting things; kinda scra
     print('Kappa_W: ', round(kappam_W, 2), ' +/- ', round(sigkappam_W, 2), ' pW/K/um')
     print('Kappa_I: ', round(kappam_I, 2), ' +/- ', round(sigkappam_I, 2), ' pW/K/um')
 
-    WLS_fit = WLS_val(sim_results[0], data)
-    print('WLS value for the fit: ', round(WLS_fit, 3))   # the function we've been minimizing is not actually the chi-squared value...
+    chisq_fit = chisq_val(sim_results[0], data)
+    print('chisq value for the fit: ', round(chisq_fit, 3)) 
 
-    chisq_fit = calc_chisq(ydata, Gbolos(sim_results[0]))
-    print('Chi-squared value for the fit: ', round(chisq_fit, 3))
+    # chisq_fit = calc_chisq(ydata, Gbolos(sim_results[0]))
+    # print('Chi-squared value for the fit: ', round(chisq_fit, 3))
     
     # parameters = np.array(['G_U', 'G_W', 'G_I', 'alpha_U', 'alpha_W', 'alpha_I'])
     # # look at histogram of fit values for each parameter
@@ -752,7 +762,7 @@ if scrap:
     from lmfit import Model
     fmodel = Model(Gbolos)
     result = fmodel.fit(y, x=x, a=14, b=3.9, mo=0.8, q=0.002)
-    sim_result = minimize(WLS_val, p0, args=[ydata, sigma], bounds=bounds)
+    sim_result = minimize(chisq_val, p0, args=[ydata, sigma], bounds=bounds)
     curve_fit(self.powerlaw_fit_func, temperatures, powerAtRns[index], p0=init_guess, sigma=sigma[index], absolute_sigma=True) 
 
 plt.show()

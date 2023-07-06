@@ -15,32 +15,43 @@ automated error analysis: baseline removal tes-by-tes basis scipy.signal.sabgal_
 """
 
 ### user params
-analyze_ivs = True
+
+# which analysis?
+analyze_ivs = False
+estimate_Gcov = True   # estimating n, k, G covariance to inform error analysis
+plot_noisyivs = False
+plot_mbolos = False
+save_pad18 = False   # write quick CSV for Joel
+scaleG = False   # scale G(Tc) to G(170 mK)
+plot_bolo23 = False
+
+# analysis options
 save_data = False   # overwrite csv and pkl data files
 save_figs = False  # overwrite figures
 latex_fonts = False
-constT = False   # fit G more explicitly
+constT = True   # save constant T_TES assumption results
 fitGexplicit = True   # fit G more explicitly
-
 show_ivplots = False   # show plots converting raw IV to real IV
 show_aplots = True   # helpful for double-checking IV analysis
 show_psatcalc = False   # i've never seen the Psat calc not work
 plot_byind = False   # for easier IV exclusion 
-plot_noisyivs = False
-plot_mbolos = False
-save_pad18 = False   # write quick CSV for Joel
-scaleG = False
-plot_bolo23 = False
 
 bolotest_dir = '/Users/angi/NIS/Bolotest_Analysis/'
 # fn_comments = '_incorrectsigmaI'
 # fn_comments = '_correctsigmaI_incorrectsigmaG'
 # fn_comments = '_noerror'
+# fn_comments = '_correctedsigmaG'
 # fn_comments = '_correctedsigmaG_powerlaw2'
 # fn_comments = '_chooseGfromTTES'   # allow T_TES and G to vary with Tbath, quote chosen Tbath value instead of "constant T" values
 # fn_comments = '_chooseGfromTTES_automatedp0'   # choose p0 values as fit results without measurement error
 # fn_comments = '_fitGexplicit_varyTTES'   # fit G explicitly, allow T_TES to vary at each %Rn
-fn_comments = '_fitGexplicit_varyTTES_diffinitguess'   # fit G explicitly, assume constant T_TES regardless of %Rn
+# fn_comments = '_fitGexplicit_varyTTES_diffinitguess'   # fit G explicitly, assume constant T_TES regardless of %Rn
+# fn_comments = '_fitKconstTTES_rerun'   # fit G explicitly, allow T_TES to vary at each %Rn
+# fn_comments = '_constT_automatedp0'   # choose p0 values as fit results without measurement error
+# fn_comments = '_fitGexplicit_varyTTES_rerun'   # fit G explicitly, assume constant T_TES regardless of %Rn
+fn_comments = '_fitGexplicit_constTTES_rerun'   # fit G explicitly, assume constant T_TES regardless of %Rn
+# fn_comments = '_fitk_constTTES_rerun'   # don't fit G explicitly, quote const T_TES results
+# fn_comments = '_fitk_varyTTES_rerun'   # don't fit G explicitly, allow T_TES to vary
 dfiles = ['/Users/angi/NIS/Bolotest_Analysis/Data/MM2017L_20171117_data/AY_1thru15_IVvsTb.pkl', '/Users/angi/NIS/Bolotest_Analysis/Data/MM2017L_20171117_data/AX_16thru30_IVvsTb.pkl']
 csv_file = bolotest_dir + 'Analysis_Files/bolotest_reanalyzedAHHH_202305' + fn_comments + '.csv'   # where to save analysis results
 pkl_file = bolotest_dir + 'Analysis_Files/bolotest_reanalyzedAHHH_202305' + fn_comments + '.pkl'   # where to save analysis results
@@ -49,8 +60,8 @@ v_nfit = .3   # v_bias above which TES is normal (approximate)
 # pRn = np.array([25, 30, 40, 50, 60, 70, 80, 90])   # % Rn
 pRn = np.array([25, 30, 40, 50, 60, 70, 80])   # % Rn
 tran_pRn_start = 0.2   # % Rn dubbed beginning of SC transition
-# init_guess = [1.E-10, 2.5, .170] if not fitGexplicit else [10E-12, 2.5, .170]  # kappa, n, Tc [mK]; powerlaw fitter
-init_guess = [1.E-11, 3.2, .170] if not fitGexplicit else [10E-12, 2, .170]  # kappa, n, Tc [mK]; powerlaw fitter
+init_guess = np.array([1.E-10, 2.5, .170]) if not fitGexplicit else np.array([10E-12, 2.5, .170])  # kappa, n, Tc [mK]; powerlaw fitter
+# init_guess = [1.E-11, 3.2, .170] if not fitGexplicit else [10E-12, 2, .170]  # kappa, n, Tc [mK]; powerlaw fitter
 v_offset = 0   # V; SC and/or normal branch should go through (0,0)
 i_offset = 0.*1e-6   # Amps; SC and/or normal branch should go through (0,0)
 tinds_return = np.array([0, 3, 8, 11, 15, 2])
@@ -172,7 +183,7 @@ if analyze_ivs:
         ### fit power law
         pfig_path = bolotest_dir + 'Plots/Psat_fits/' + tesid + '_Pfit' + fn_comments + '.png' if save_figs else None
         GTcs, Ks, ns, Ttes, GTcs_err, Ks_err, ns_err, Ttes_err = tes.fitPowerLaw(pRn, meas_temps, p_pnts.T, init_guess, fitToLast=True, 
-                suptitle=tesid, TbsToReturn=TbsToReturn, plot=True, sigma=sigma_p.T*10, nstd=5, pfigpath=pfig_path, constT=constT, fitGexplicit=fitGexplicit)   # pass error to fitter     
+                suptitle=tesid, TbsToReturn=TbsToReturn, plot=True, sigma=sigma_p.T, nstd=5, pfigpath=pfig_path, constT=constT, fitGexplicit=fitGexplicit)   # pass error to fitter     
         if save_figs: plt.savefig(bolotest_dir + 'Plots/fit_params/' + tesid + '_fitparams' + fn_comments + '.png', dpi=300) 
         
         if constT:
@@ -527,9 +538,164 @@ if plot_bolo23:
                     suptitle='', TbsToReturn=TbsToReturn, plot=True, sigma=sigma_p.T, nstd=5, pfigpath=pfig_path)        
     if save_figs: plt.savefig(bolotest_dir + 'Plots/for_paper/bolo23_fitparams' + fn_comments + '_forpaper.png', dpi=300) 
 
+if estimate_Gcov:
+    tesrange = np.arange(2)
+
+    bays = ['BayAY', 'BayAX']
+
+    ivs = {}   # master dictionary
+    tesids = []
+    data = {}
+    for bb in np.arange(len(bays)):
+        ### load data
+        dfile = dfiles[bb]
+        with open(dfile, "rb") as f:
+            data_temp = pkl.load(f, encoding='latin1')
+        tesids_temp = [(str(bays[bb])) + '_' + key for key in data_temp[bays[bb]]]
+        if bays[bb] == 'BayAY':
+            # remove noisy data (probably unlocked SQUID)
+            tesids_temp.remove('BayAY_Row00')   # noisy
+            tesids_temp.remove('BayAY_Row09')   # noisy
+            tesids_temp.remove('BayAY_Row15')   # noisy
+        elif bays[bb] == 'BayAX':  
+            # remove noisy data (probably unlocked SQUID)
+            tesids_temp.remove('BayAX_Row05')   
+            tesids_temp.remove('BayAX_Row11')    
+            tesids_temp.remove('BayAX_Row14')   
+            tesids_temp.remove('BayAX_Row15') 
+            pass
+        data[bays[bb]] = data_temp[bays[bb]]
+        tesids.extend(tesids_temp)
+
+    # sort raw data and convert to real
+    for ts, tesid in enumerate(tesids[0:3]):   # iterate through bolos
+
+        bay = tesid.split('_')[0]; row = tesid.split('_')[1]
+        if bay=='BayAY':
+            pad = str(int(tesid.split('Row')[1])+1)  # pad number
+        elif bay=='BayAX':
+            pad = str(int(tesid.split('Row')[1])+16)  # pad number
+        
+        boloid = pad_bolo_map[pad]   # map TES ID to pad # to bolo ID
+
+        tes = tesanalyze_ahhh.TESAnalyze() 
+        ivs[tesid] = {}  
+        ivs[tesid]['Pad'] = pad; ivs[tesid]['Bolometer'] = boloid   # save IDs to master dictionary
+        tlabels = [key for key in data[bay][row]['iv']]
+        if tesid == 'BayAY_Row12' or tesid == 'BayAX_Row10' or tesid == 'BayAX_Row03' or tesid == 'BayAX_Row00' or tesid == 'BayAX_Row06': 
+            tlabels.remove('iv014')   # wonky IV
+        maxiv = max([len(data[bay][row]['iv'][tlab]['data'][0]) for tlab in tlabels])   # handle IVs of different lengths
+        asize = (len(data[bay][row]['iv']), maxiv)   # temp length by maximum iv size
+        vbias = np.full(asize, np.nan); vfb = np.full(asize, np.nan)   # initialize arrays
+        vtes = np.full(asize, np.nan); ites = np.full(asize, np.nan); rtes = np.full(asize, np.nan); i_meas = np.full(asize, np.nan); ptes = np.full(asize, np.nan)
+        meas_temps = np.array([np.nan]*len(tlabels)); rn_temp = np.array([np.nan]*len(meas_temps))
+        v_pnts = np.zeros((len(tlabels), len(pRn))); i_pnts = np.zeros((len(tlabels), len(pRn))); p_pnts = np.zeros((len(tlabels), len(pRn)))   # initialize interpolated IVs
+        sigma_v = np.array([np.nan]*len(tlabels)); sigma_i = np.array([np.nan]*len(tlabels)); nfits_real = np.zeros((len(tlabels), 2))
+
+        for tt, tlab in enumerate(tlabels):   # iterate through temperatures
+
+            meas_temps[tt] = data[bay][row]['iv'][tlab]['measured_temperature']
+            ivlen = len(data[bay][row]['iv'][tlab]['data'][0])   # handle IVs of different lengths
+            vbias[tt,:ivlen] = data[bay][row]['iv'][tlab]['data'][0,::-1]   # raw voltage, taken from high voltage -> 0
+            vfb[tt,:ivlen] = data[bay][row]['iv'][tlab]['data'][1,::-1]   # raw current, taken from high voltage -> 0
+            vtes[tt], ites[tt], rtes[tt], ptes[tt], i_meas[tt], n_fit, norm_inds, sc_fit, end_sc, rpar = tes.ivAnalyzeTDM(vbias[tt], vfb[tt], Rfb, Rb, Rsh, M_r, v_nfit, show_plot=False)   # *
+            nfits_real[tt] = np.polyfit(vtes[tt,norm_inds][0], ites[tt,norm_inds][0], 1)   # normal branch line fit in real IV units
+            ifit_norm = vtes[tt,norm_inds]*nfits_real[tt, 0]+nfits_real[tt, 1]   # normal branch line fit
+            rn_temp[tt] = np.mean(rtes[tt, norm_inds])   # ohms, should be consistent with 1/nfit_real[0]
+            sigma_v[tt] = np.std(vtes[tt,:end_sc])   # V, error in voltage measurement = std of SC branch
+            sigma_i[tt] = np.std(ites[tt,norm_inds] - ifit_norm)  # A, error in current measurement = std in normal branch after line subtraction
+            v_pnts[tt], i_pnts[tt], p_pnts[tt] = tes.ivInterpolate(vtes[tt], ites[tt], rtes[tt], pRn, rn_temp[tt], tran_pRn_start=tran_pRn_start, plot=False)
 
 
+        TbsToReturn = meas_temps[tinds_return]
+        if show_aplots: 
+            plt.figure()
+            tsort = np.argsort(meas_temps)
+            for tt in tsort:
+                plt.plot(v_pnts[tt]*1e6, i_pnts[tt]*1e3, 'o', alpha=0.7, color=plt.cm.plasma((meas_temps[tt]-min(TbsToReturn)*1)/(max(meas_temps))))   # meas_temps/max(meas_temps)
+                plt.plot(vtes[tt]*1e6, ites[tt]*1e3, alpha=0.6, label='{} mK'.format(round(meas_temps[tt]*1E3,2)), color=plt.cm.plasma((meas_temps[tt]-min(TbsToReturn)*1)/(max(meas_temps)*0.8)))
+            plt.xlabel('Voltage [$\mu$V]')
+            plt.ylabel('Current [mA]')
+            plt.title('Interpolated IV Points')
+            plt.legend()
+            if save_figs: plt.savefig(bolotest_dir + 'Plots/IVs/' + tesid + '_interpIVs' + fn_comments + '.png', dpi=300)
 
+        rn = np.nanmean(rn_temp)
+        rn_err = np.nanstd(rn_temp)
 
+        Tb_toquote = meas_temps[Tb_ind]   # measured temperature to quote
+        qind = np.where(pRn==pRn_toquote)[0][0]
+        tind = np.where(TbsToReturn==Tb_toquote)[0][0]  # index of subset TbsToReturn to return
+        sigma_p = np.zeros(np.shape(i_pnts))   # this is stupid but it works
+        for ii, ipnt in enumerate(i_pnts):
+            sigma_p[ii] = tes.sigma_power(i_pnts[ii], sigma_i[ii], v_pnts[ii], sigma_v[ii])
+
+        # get initial fit for setting k and n ranges
+        params_init = tes.fitPowerLaw(pRn, meas_temps, p_pnts.T, init_guess, fitToLast=True, 
+                suptitle=tesid, TbsToReturn=TbsToReturn, plot=False, sigma=sigma_p.T, constT=True, fitGexplicit=False)     
+        GTc0 = params_init[0][qind]; sigma_GTc0 = params_init[4][qind]
+        K0 = params_init[1][qind]; sigma_K0 = params_init[5][qind]
+        n0 = params_init[2][qind]; sigma_n0 = params_init[6][qind]
+
+        params_fitG = tes.fitPowerLaw(pRn, meas_temps, p_pnts.T, init_guess, fitToLast=True, 
+                suptitle=tesid, TbsToReturn=TbsToReturn, plot=False, sigma=sigma_p.T, constT=True, fitGexplicit=True)    
+        GTc0_fitG = params_fitG[0][qind]; sigma_GTc0_fitG = params_fitG[4][qind]
+
+        K_range = np.linspace(K0 - sigma_K0, K0 + sigma_K0)
+        GTc_krange = np.zeros(len(K_range)); n_krange = np.zeros(len(K_range))
+        init_guess_k = init_guess[[1,2]] 
+        # pdb.set_trace()
+        for kk, Kv in enumerate(K_range): 
+            params_temp = tes.fitPowerLaw(pRn, meas_temps, p_pnts.T, init_guess_k, fitToLast=True, 
+                suptitle=tesid, TbsToReturn=TbsToReturn, plot=False, sigma=sigma_p.T, nstd=5, constT=True, fitGexplicit=False, fixedK=Kv) 
+            GTc_krange[kk] = params_temp[0][qind]; n_krange[kk] = params_temp[2][qind]
+
+        fig, ax1 = plt.subplots()
+        ax2 = ax1.twinx()
+        ax1.plot(K_range*1E11, n_krange, alpha=.5, color='C0', marker='o', markeredgewidth=1.0)
+        ax2.plot(K_range*1E11, GTc_krange*1E12, alpha=.5, color='C3', marker='o')
+        plt.errorbar(K0*1E11, GTc0_fitG*1E12, yerr=sigma_GTc0_fitG*1E12, color='k', marker='x', capsize=4, alpha=0.7, label='Full G Fit Result')
+        ax1.set_xlabel('k [1E11]')
+        ax1.set_ylabel('n', color='C0'); ax2.set_ylabel('GTc [pW/K]', color='C3')
+        ax1.tick_params(axis='y', labelcolor='C0'); ax2.tick_params(axis='y', labelcolor='C3')
+        plt.legend()
+        plt.title('Varying k - Pad ' + pad)
+        
+        plt.figure()
+        plt.plot(K_range*1E11, GTc_krange*1E12, alpha=.5, color='C3', marker='o')
+        plt.errorbar(K0*1E11, GTc0*1E12, yerr=sigma_GTc0*1E12, color='C3', marker='x', capsize=4, alpha=0.7, label='Full k Fit Result')
+        plt.errorbar(K0*1E11, GTc0_fitG*1E12, yerr=sigma_GTc0_fitG*1E12, color='k', marker='x', capsize=4, alpha=0.7, label='Full G Fit Result')
+        plt.xlabel('k [1E11]'); plt.ylabel('GTc [pW/K]')
+        plt.legend()
+        plt.title('Varying k - Pad ' + pad)
+
+        # nval = params_init[2][qind]; sigma_n = params_init[6][qind]
+        n_range = np.linspace(n0 - sigma_n0, n0 + sigma_n0)
+        GTc_nrange = np.zeros(len(n_range)); K_nrange = np.zeros(len(n_range))
+        init_guess_n = init_guess[[0,2]]
+        for nn, nv in enumerate(n_range):
+            params_temp = tes.fitPowerLaw(pRn, meas_temps, p_pnts.T, init_guess_n, fitToLast=True, 
+                suptitle=tesid, TbsToReturn=TbsToReturn, plot=False, sigma=sigma_p.T, nstd=5, constT=True, fitGexplicit=False, fixedn=nv) 
+            GTc_nrange[nn] = params_temp[0][qind]; K_nrange[nn] = params_temp[1][qind]
+
+        fig, ax1 = plt.subplots()
+        ax2 = ax1.twinx()
+        ax1.plot(n_range, K_nrange*1E11, alpha=.5, color='C1', marker='o', markeredgewidth=1.0)
+        # ax1.errorbar(n0, K0*1E11, yerr=sigma_K0*1E11, color='C0', marker='x', capsize=4, alpha=0.5, label='Full k Fit Result - k')
+        ax2.plot(n_range, GTc_nrange*1E12, alpha=.5, color='C3', marker='o')
+        plt.errorbar(n0, GTc0_fitG*1E12, yerr=sigma_GTc0_fitG*1E12, color='k', marker='x', capsize=4, alpha=0.7, label='Full G Fit Result')
+        ax1.set_xlabel('n')
+        ax1.set_ylabel('k [1E11]', color='C1'); ax2.set_ylabel('GTc [pW/K]', color='C3')
+        ax1.tick_params(axis='y', labelcolor='C1'); ax2.tick_params(axis='y', labelcolor='C3')
+        plt.legend()
+        plt.title('Varying n - Pad ' + pad)
+        
+        plt.figure()
+        plt.plot(n_range, GTc_nrange*1E12, alpha=.5, color='C3', marker='o')
+        plt.errorbar(n0, GTc0*1E12, yerr=sigma_GTc0*1E12, color='C3', marker='x', capsize=4, alpha=0.7, label='Full k Fit Result')
+        plt.errorbar(n0, GTc0_fitG*1E12, yerr=sigma_GTc0_fitG*1E12, color='k', marker='x', capsize=4, alpha=0.7, label='Full G Fit Result')
+        plt.xlabel('n'); plt.ylabel('GTc [pW/K]')
+        plt.legend()
+        plt.title('Varying n - Pad ' + pad)
 
 plt.show() 
