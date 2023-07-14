@@ -9,30 +9,9 @@ aharkehosemann@gmail.com
 
 
 UPDATES
+2023/07/12: quote mean values, note bimodality and put total population in SI but note two populations share the same chi-squared
 
-2022.06.15 : We recently discovered the wiring layers have a smaller width (W1=5um, W2=3um) than the SiN layers, and that there's a 120nm SiOx layer on the membrane under the 300nm SiNx layer. 
-I now scale W2 terms by 3/5 and W stack by thickness-weighted average width (assumes G scales linearly with layer width). 
-Shannon estimates 11-14 nm etching on the SiOx, so true thickness is ~109 nm. 
-
-2022.06.28 : Should we model the data as five layers (treat substrate as 420 nm thick layer of one material) or six layers (one 120 nm SiOx and one 300nm layer SiNx)?
-DOF of six-layer fit is 0...
-What I've been referring to as "function to minimize" is actually weighted least squares. 
-Not sure if looking at significance is useful because we aren't hypothesis testing and have very small DOF.
-
-2022/08/03 : Did full error analysis to get sigma_G on G(170), i.e. I wrote sigma_GscaledT() and added those errors to the spreadsheet, where I then took the weighted average and error if there are redundant bolos.
-
-2022/10/07 : Previously the "unconstrained model" actually allowed alpha to vary from 0 to 2. If allowed to vary between [0,inf), the alpha_W error is much larger. 
-
-2022/11/15 : For bolotest-like G predictions and NEP, I changed the W1 and W2 width scaling for leg widths<7 um to be lw - 2 um and lw - 4 um respectively. 
-Previously G(microstrip) was scaled by leg width/7 for lw<7um and was the same value for lw>7, which does not take into account that I widens with the leg.
-
-2023/04/19: sigma_current in IV has been overestimated by a couple orders of magnitude (was not subtracting line fit in normal branch). Reran sim with this correction on 5/5.  
-
-2023/05/10: n term in sigma_G calculation was missing a component and is now expected to dominate sigma_G. 
-
-2023/06/05: actually actually, what we were calling chi-squared values then weighted least squared values really is chi-squared 
-
-TODO: redo six-layer fit to compare chi-squared values?; is NA correct in calculation of C_V?
+TODO: redo six-layer fit to compare chi-squared values?
 """
 from bolotest_routines import *
 from scipy.optimize import fsolve
@@ -42,7 +21,7 @@ import csv
 ### User Switches
 # choose analysis
 run_sim = False   # run MC simulation for fitting model
-quality_plots = True   # results on G_x vs alpha_x parameter space for each layer
+quality_plots = False   # results on G_x vs alpha_x parameter space for each layer
 random_initguess = False   # try simulation with randomized initial guesses
 average_qp = False   # show average value for 2D quality plot over MC sim to check for scattering
 lit_compare = False   # compare measured conductivities with literature values
@@ -50,72 +29,38 @@ compare_legacy = False   # compare with NIST sub-mm bolo legacy data
 design_implications = False
 load_and_plot = False   # scrap; currently replotting separate quality plots into a 1x3 subplot figure
 scrap = False
+bimodal_solns = True
+compare_modelanddata = False   # plot model predictions and bolotest data
 
 # options
 save_figs = False   
 save_sim = False   # save full simulation
 save_csv = False   # save csv file of resulting parameters
-show_plots = True   # show simulated y-data plots during MC simulation
+show_plots = False   # show simulated y-data plots during MC simulation
 calc_Gwire = False   # calculate G of the wiring stack if it wasn't saved during the simulation
 latex_fonts = True
-vmax = 2E3   # quality plot scaling
 
 n_its = int(1E4)   # number of iterations for MC simulation
 num_guesses = 100   # number of randomized initial guesses to try
 analysis_dir = '/Users/angi/NIS/Bolotest_Analysis/'
-# fn_comments = '_alpha0inf_1E5iterations'   # incorrect current error calc
-# fn_comments = '_alpha0inf_1E4iterations_updatedIerrors'   # correct current error but incorrect n term in sigma_GTES
-# fn_comments = '_alpha0inf_1E4iterations_updatednterminGerror'   # corrected n term
-# fn_comments = '_alpha0inf_1E4iterations_noPerror'   # fitter does not know P measurement error
-# fn_comments = '_alpha0inf_1E4iteratinos_firsterror'   # first go at getting errors, incorrect sigma_I (mean not subtracted from and n-term in sigma_G)
-# fn_comments = '_alpha0inf_1E4iteratinos_firsterror_recalculatedsigmaGTES'   # first go at getting errors, errors pulled from _errorcompare_master, incorrect sigma_I (mean not subtracted from and n-term in sigma_G)
-# fn_comments = '_alpha0inf_1E4iterations_wrongsigmaI'   # incorrect sigma_I
-# fn_comments = '_alpha0inf_1E4iterations_wrongsigmaG_3ndrun'   # correct sigma_i, incorrect sigma_G n-term
-# fn_comments = '_alpha0inf_1E5iterations_wrongsigmaG'   # correct sigma_i, incorrect sigma_G n-term
-# fn_comments = '_alpha0ainf_1E4iterations_corrsigmaG_2ndrun'   # corrected n term, pretty stable run to run
-# fn_comments = '_alpha0inf_1E4iterations_nobling'   # corrected n term and exclude extra bling bolos
-# fn_comments = '_alpha0inf_1E4iteratinos_firsterror_fitkconstantTTESresults'   # first go at getting errors, errors pulled from _errorcompare_master, incorrect sigma_I (mean not subtracted from and n-term in sigma_G)
-# fn_comments = '_alpha0inf_1E4iteratinos_firsterror_fitkconstantTTESresults_nobling'   # first go at getting errors, errors pulled from _errorcompare_master, incorrect sigma_I (mean not subtracted from and n-term in sigma_G)
-# fn_comments = '_alpha0inf_1E4iterations_fitkconstantTTES'   # first go at getting errors, errors pulled from _errorcompare_master, incorrect sigma_I (mean not subtracted from and n-term in sigma_G)
-# fn_comments = '_alpha0inf_1E4iteratinos_fitGconstantTTES'   # first go at getting errors, errors pulled from _errorcompare_master, incorrect sigma_I (mean not subtracted from and n-term in sigma_G)
-# fn_comments = '_alpha0inf_1E4iteratinos_fitkconstantTTES_nobling'   # first go at getting errors, errors pulled from _errorcompare_master, incorrect sigma_I (mean not subtracted from and n-term in sigma_G)
-fn_comments = '_alpha0inf_1E4iteratinos_fitGconstantTTES_nobling_constrained'   # first go at getting errors, errors pulled from _errorcompare_master, incorrect sigma_I (mean not subtracted from and n-term in sigma_G)
-# fn_comments = '_alpha0inf_1E4iteratinos_fitGconstantTTES_nobling'   # first go at getting errors, errors pulled from _errorcompare_master, incorrect sigma_I (mean not subtracted from and n-term in sigma_G)
-plot_comments = ''
-alim = [0, np.inf]   # limits for fitting alpha
+# fn_comments = '_alpha0inf_1E4iteratinos_fitGconstantTTES_nobling_constrained'   # first go at getting errors, errors pulled from _errorcompare_master, incorrect sigma_I (mean not subtracted from and n-term in sigma_G)
 # alim = [0,1]   # limits for fitting alpha
-L = 220   # TES leg length, um
-A_U = 7*420E-3; A_W = 5*400E-3; A_I = 7*400E-3  # Area of film on one leg,um^2
+fn_comments = '_alpha0inf_1E4iteratinos_fitGconstantTTES_nobling'   # first go at getting errors, errors pulled from _errorcompare_master, incorrect sigma_I (mean not subtracted from and n-term in sigma_G)
+alim = [0, np.inf]   # limits for fitting alpha
+plot_comments = ''
+vmax = 2E3   # quality plot color bar scaling
+calc = 'mean'   # how to evaluate fit parameters from simluation data
+bolo1b = True   # add bolo1 data to legacy prediction comparison plot
+
 
 # initial guess for fitter
 # p0_a0inf = np.array([0.74, 0.59, 1.29, 0.47, 1.94, 1.26]); sigmap0_a0inf = np.array([0.09, 0.19, 0.06, 0.58, 2.45, 0.11])   # U, W, I [pW/K], alpha_U, alpha_W, alpha_I [unitless]; fit vals from alpha=[0,2] model
 p0_a0inf_median = np.array([0.73, 0.61, 1.28, 0.20, 1.2, 1.25]);# sigmap0_a0inf_median = np.array([0.09, 0.19, 0.06, 0.58, 2.45, 0.11])   # U, W, I [pW/K], alpha_U, alpha_W, alpha_I [unitless]; fit vals from alpha=[0,2] model
-# p0_a02 = np.array([0.77, 0.52, 1.28, 0.63, 1.23, 1.26]); sigmap0_a02 = np.array([0.12, 0.20, 0.05, 0.73, 0.80, 1.26])   # fit vals from alpha=[0,2] model
-p0_a01 = np.array([0.8, 0.42, 1.33, 1., 1., 1.]); sigmap0_a01 = np.array([0.03, 0.06, 0.03, 0.02, 0.03, 0.00])   #  fit vals from alpha=[0,2] model, 1E5 iterations
+p0_a01 = np.array([0.8, 0.42, 1.33, 1., 1., 1.]); #sigmap0_a01 = np.array([0.03, 0.06, 0.03, 0.02, 0.03, 0.00])   #  fit vals from alpha=[0,1] model, 1E5 iterations
 p0 = p0_a0inf_median;# sigma_p0 = sigmap0_a0inf_median
 
-# choose data to use
-# ydata_Tc = np.array([11.7145073, 4.921841228, 8.077815536, 10.03001622, 16.63099617, 5.386790491, 15.2863792, 3.585251305])   # pW/K at Tc, most were weighted averages*; bolo 1b*, 24*, 23*, 22, 21*, 20*, 7*, 13*; bolo1b is weighted average (not sure we trust row 10)
-# sigma_Tc = np.array([0.100947739, 0.063601732, 0.078665632, 0.130040288, 0.142600818, 0.059261252, 0.123206779, 0.052084114])   # pW/K at Tc; bolo 1b*, 24*, 23*, 22, 21*, 20*, 7*, 13*
-# ydata_170mK_noPerr = [13.87604963, 5.11402462, 8.285371853, 10.28612903, 16.69684211, 5.501194508, 15.48321544, 3.576823158]   # pW/K at 170 mK fit without P error, most were weighted averages*; bolo 1b*, 24*, 23*, 22, 21*, 20*, 7*, 13* (only using row 5 value of bolo1b)
-# sigma_170mK_noPerr = [0.814944269, 0.218018499, 0.29514379, 0.620991797, 1.09788405, 0.175358636, 1.054916235, 0.090860025]
-# ydata_170mK_witherr = [13.51632171, 4.889791292, 7.929668225, 9.925580294, 16.27276237, 5.27649525, 14.95079826, 3.577979915]   # pW/K at 170 mK with full G temp scaling error analysis, pulled from _witherrors spreadsheet, most were weighted averages*; bolo 1b*, 24*, 23*, 22, 21*, 20*, 7*, 13* (only using row 5 value of bolo1b)
-# sigma_170mK_witherr = [0.396542, 0.08774166, 0.148831461, 0.22016008, 0.411908086, 0.079748858, 0.340424395, 0.074313687]
-# ydata_170mK_witherr = [13.51632171, 4.889791292, 7.929668225, 9.925580294, 16.27276237, 5.27649525, 14.95079826, 3.577979915]   # pW/K at 170 mK with full G temp scaling error analysis, errors calculated in _errorcompare_master, most were weighted averages*; bolo 1b*, 24*, 23*, 22, 21*, 20*, 7*, 13* (only using row 5 value of bolo1b)
-# sigma_170mK_witherr = [0.396542, 0.066131706, 0.127251408, 0.22016008, 0.34608384, 0.069631337, 0.302880201, 0.053104708]
-# ydata_170mK_wrongsigmaI = [13.51321747, 4.93174278, 8.000974716, 9.917328335, 16.32689035, 5.348468327, 15.00602246, 3.577102069]   # pW/K at 170 mK with full G temp scaling error analysis, most were weighted averages*; bolo 1b*, 24*, 23*, 22, 21*, 20*, 7*, 13* (only using row 5 value of bolo1b)
-# sigma_170mK_wrongsigmaI = [34.762719, 12.42239969, 15.1839926, 26.51034923, 25.99331922, 10.8398234, 22.41338756, 9.70233484]
-# ydata_170mK_wrongsigmaG = [13.24451089, 5.000777852, 7.960183617, 9.833994168, 15.72463397, 5.254644954, 14.31984759, 3.577102069]   # pW/K at 170 mK with corrected current noise measurement, weighted averages*; bolo 1b*, 24*, 23*, 22, 21*, 20*, 7*, 13* (only using row 5 value of bolo1b)
-# sigma_170mK_wrongsigmaG = [0.381955399, 0.063312254, 0.08912874, 0.181640644, 0.383600005, 0.058708221, 0.44963107, 0.043775235]
-# ydata_170mK_corrsigmaG = [13.24451089, 4.999984304, 7.960081461, 9.833994168, 15.72503124, 5.257487318, 14.31854675, 3.581627355]   # pW/K at 170 mK with fixed n term in GTES error, most were weighted averages*; bolo 1b*, 24*, 23*, 22, 21*, 20*, 7*, 13* (only using row 5 value of bolo1b)
-# sigma_170mK_corrsigmaG = [0.49306722, 0.078336521, 0.112242869, 0.231738644, 0.50525562, 0.073826253, 0.58107854, 0.053441225]
-# ydata_170mK_nobling = [13.24451089, 4.668924466, 7.830962629, 9.833994168, 15.57684727, 5.198992752, 14.31854675, 3.460230096]   # pW/K at 170 mK with fixed n term in GTES error, weighted average only on 7 (second vals have extra bling); bolo 1b, 24, 23, 22, 21, 20, 7*, 13 
-# sigma_170mK_nobling = [0.49306722, 0.142644772, 0.17760485, 0.231738644, 0.808761146, 0.080176748, 0.58107854, 0.076007386]
-# ydata_fitkconstTTES = [13.95595194, 5.180700247, 8.145842767, 10.11727864, 17.50724267, 5.648101525, 15.94041907, 3.679914362]   # pW/K at 170 mK with fixed n term in GTES error, weighted average only on 7 (second vals have extra bling); bolo 1b, 24, 23, 22, 21, 20, 7*, 13 
-# sigma_fitkconstTTES = [1.027613389, 0.155053601, 0.219139618, 0.467419093, 1.200372718, 0.153053379, 1.439783275, 0.100790428]
-# ydata_fitkconstTTES_nobling = [13.95595194, 4.721712491, 7.897129469, 10.11727864, 17.22593552, 5.657104524, 15.94041907, 3.513915609]   # pW/K at 170 mK with fixed n term in GTES error, weighted average only on 7 (second vals have extra bling); bolo 1b, 24, 23, 22, 21, 20, 7*, 13 
-# sigma_fitkconstTTES_nobling = [1.027613389, 0.265183128, 0.335912651, 0.467419093, 1.89750536, 0.169576323, 1.439783275, 0.139127518]
-# ydata_fitGexplicit = [13.95595194, 5.235218152, 8.182147122, 10.11727864, 17.47817158, 5.653424631, 15.94469664, 3.655108238]   # pW/K at 170 mK fitting for G explicitly, weighted average only on 7 (second vals have extra bling); bolo 1b, 24, 23, 22, 21, 20, 7*, 13 
+# choose GTES data 
+# ydata_fitGexplicit = [13.95595194, 5.235218152, 8.182147122, 10.11727864, 17.47817158, 5.653424631, 15.94469664, 3.655108238]   # pW/K at 170 mK fitting for G explicitly, weighted average on most bolos (*) (second vals have extra bling); bolo 1b, 24*, 23*, 22, 21*, 20, 7*, 13* 
 # sigma_fitGexplicit = [0.073477411, 0.01773206, 0.021512022, 0.04186006, 0.067666665, 0.014601341, 0.083450365, 0.013604177]   # fitting for G explicitly produces very small error bars
 ydata_fitGexplicit_nobling = [13.95595194, 4.721712381, 7.89712938, 10.11727864, 17.22593561, 5.657104443, 15.94469664, 3.513915367]   # pW/K at 170 mK fitting for G explicitly, weighted average only on 7; bolo 1b, 24, 23, 22, 21, 20, 7*, 13 
 sigma_fitGexplicit_nobling = [0.073477411, 0.034530085, 0.036798694, 0.04186006, 0.09953389, 0.015188074, 0.083450365, 0.01762426]
@@ -123,19 +68,10 @@ ydata = np.array(ydata_fitGexplicit_nobling); sigma = np.array(sigma_fitGexplici
 
 bolos = np.array(['bolo 1b', 'bolo 24', 'bolo 23', 'bolo 22', 'bolo 21', 'bolo 20', 'bolo 7', 'bolo 13'])
 bounds = [(0, np.inf), (0, np.inf), (0, np.inf), (alim[0], alim[1]), (alim[0], alim[1]), (alim[0], alim[1])]   # bounds for 6 fit parameters: G_U, G_W, G_I, alpha_U, alpha_W, alpha_I
-# fits_J = np.array([.89, 0.30, 1.3277, 0.58, 1.42, 1.200]); error_J = np.array([0.14, 0.18, 0.02, 0.57, 0.53, 0.06])   # compare with Joel's results
-# results_J = [fits_J, error_J]   # Joel's fit parameters and error
-# boundsred = [(0, np.inf), (alim[0], alim[1])]   # G, alpha
 plot_dir = analysis_dir + 'plots/layer_extraction_analysis/'
 sim_file = analysis_dir + 'Analysis_Files/sim' + fn_comments + '.pkl'
 csv_file = analysis_dir + 'Analysis_Files/sim' + fn_comments + '.csv'
 data = [ydata, sigma] 
-
-# Gfile = '/Users/angi/NIS/Bolotest_Analysis/Analysis_Files/'
-# dfile = dfiles[bb]
-# with open(dfile, "rb") as f:
-#     data_temp = pkl.load(f, encoding='latin1')
-# data[bays[bb]] = data_temp[bays[bb]]
 
 if latex_fonts:   # fonts for paper plots
     plt.rc('text', usetex=True)
@@ -146,7 +82,6 @@ if latex_fonts:   # fonts for paper plots
     plt.rcParams['xtick.major.size'] = 5; plt.rcParams['xtick.minor.visible'] = False    
     plt.rcParams['ytick.major.size'] = 5; plt.rcParams['ytick.minor.visible'] = False
 
-
 ### Execute Analysis
 if run_sim:   # run simulation with just hand-written function
     sim_results = runsim_chisq(n_its, p0, data, bounds, plot_dir, show_yplots=show_plots, save_figs=save_figs, save_sim=save_sim, sim_file=sim_file, fn_comments=fn_comments)  
@@ -156,78 +91,50 @@ if quality_plots:   # plot G_x vs alpha_x parameter space with various fit resul
 
     with open(sim_file, 'rb') as infile:   # load simulation pkl
         sim_dict = pkl.load(infile)
-    sim_data = sim_dict['sim']
-    params_mean = [sim_dict['fit']['fit_params'], sim_dict['fit']['fit_std']]
-    params_median = [np.median(sim_data, axis=0), np.std(sim_data, axis=0)]   # take median value to avoid outliers
-    
-    if calc_Gwire:   # just in case Gwires wasn't saved to simualtion file
-        Gwires = np.array([Gfrommodel(row, 0.420, 7, 220, layer='wiring', fab='bolotest')[0,0]/4 for row in sim_data])   # this could be better but works for now
-    else:
-        Gwires = sim_dict['Gwires']
-    Gwire_mean = np.mean(Gwires); Gwire_median = np.median(Gwires); sigma_Gwire = np.std(Gwires)
+    sim_dataT = sim_dict['sim']; sim_data = sim_dataT.T   # simulation parameter values
+    param_labels = ['G$_U$', 'G$_W$', 'G$_I$', '$\\alpha_U$', '$\\alpha_W$', '$\\alpha_I$']
 
     if np.isinf(alim[1]):   # quality plot title
         qp_title = '$\\boldsymbol{\\mathbf{\\alpha \\in [0,\infty)}}$'   # title for 1x3 quality plots
-        # qp_title = '$\\boldsymbol{\\mathbf{\\alpha \\in [0,\infty)}}$\\textbf{ (Mean)}'   # title for 1x3 quality plots
     else:
         qp_title = '$\\boldsymbol{\\mathbf{\\alpha \in [0,'+str(alim[1])+']}}$'   # title for 1x3 quality plots
 
-    ### plot fit in 2D parameter space
-    qualityplots(data, params_mean, plot_dir=plot_dir, save_figs=save_figs, fn_comments=fn_comments+'_mean', title=qp_title+'\\textbf{ (Mean)}', vmax=vmax)
+    ### plot fit in 2D parameter space, take mean values of simulation
+    results_mean = qualityplots(data, sim_dict, plot_dir=plot_dir, save_figs=save_figs, fn_comments=fn_comments+'_mean', title=qp_title+'\\textbf{ (Mean)}', vmax=vmax, calc='mean')
+    params_mean, paramerrs_mean, kappas_mean, kappaerrs_mean, Gwire_mean, sigmaGwire_mean, chisq_mean = results_mean
 
-    ### calculate thermal conductivities
-    print ('\n\nResults taking mean values of fit parameters:')
-    GmeasU_mean, GmeasW_mean, GmeasI_mean, alphaU_mean, alphaW_mean, alphaI_mean = params_mean[0]; sigGU, sigGW, sigGI, sigalphaU, sigalphaW, sigalphaI = params_mean[1]
-    print('G_U(420 nm) = ', round(GmeasU_mean, 2), ' +/- ', round(sigGU, 2), 'pW/K')
-    print('G_W(400 nm) = ', round(GmeasW_mean, 2), ' +/- ', round(sigGW, 2), 'pW/K')
-    print('G_I(400 nm) = ', round(GmeasI_mean, 2), ' +/- ', round(sigGI, 2), 'pW/K')
-    print('alpha_U = ', round(alphaU_mean, 2), ' +/- ', round(sigalphaU, 2))
-    print('alpha_W = ', round(alphaW_mean, 2), ' +/- ', round(sigalphaW, 2))
-    print('alpha_I = ', round(alphaI_mean, 2), ' +/- ', round(sigalphaI, 2))
-    print('')
-    kappaU_mean = GtoKappa(GmeasU_mean, A_U, L); sigkappaU_mean = GtoKappa(sigGU, A_U, L)   # pW / K / um; error analysis is correct because kappa(G) just depends on constants
-    kappaW_mean = GtoKappa(GmeasW_mean, A_W, L); sigkappaW_mean = GtoKappa(sigGW, A_W, L)   # pW / K / um; error analysis is correct because kappa(G) just depends on constants
-    kappaI_mean = GtoKappa(GmeasI_mean, A_I, L); sigkappaI_mean = GtoKappa(sigGI, A_I, L)   # pW / K / um; error analysis is correct because kappa(G) just depends on constants
-    print('Kappa_U: ', round(kappaU_mean, 2), ' +/- ', round(sigkappaU_mean, 2), ' pW/K/um')
-    print('Kappa_W: ', round(kappaW_mean, 2), ' +/- ', round(sigkappaW_mean, 2), ' pW/K/um')
-    print('Kappa_I: ', round(kappaI_mean, 2), ' +/- ', round(sigkappaI_mean, 2), ' pW/K/um')
-    print('G_wire = ', round(Gwire_mean, 2), ' +/- ', round(sigma_Gwire, 2), 'pW/K')
+    ### plot fit in 2D parameter space, take median values of simulation
+    results_med = qualityplots(data, sim_dict, plot_dir=plot_dir, save_figs=save_figs, fn_comments=fn_comments+'_median', title=qp_title+'\\textbf{ (Median)}', vmax=vmax, calc='median')
+    params_med, paramerrs_med, kappas_med, kappaerrs_med, Gwire_med, sigmaGwire_med, chisq_med = results_med
 
-    chisq_fit = chisq_val(params_mean[0], data)
-    print('Chi-squared value for the fit: ', round(chisq_fit, 3)) 
-    vals_mean = np.array([params_mean[0][0], params_mean[0][1], params_mean[0][2], params_mean[0][3], params_mean[0][4], params_mean[0][5], kappaU_mean, kappaW_mean, kappaI_mean, Gwire_mean, chisq_fit])
-    vals_err = np.array([params_mean[1][0], params_mean[1][1], params_mean[1][2], params_mean[1][3], params_mean[1][4], params_mean[1][5], sigkappaU_mean, sigkappaW_mean, sigkappaI_mean, sigma_Gwire, ''])   # should be the same for mean and median
+    ### pairwise correlation plots
+    pairfig = pairwise(sim_data, param_labels, title=qp_title, save_figs=save_figs, plot_dir=plot_dir, fn_comments=fn_comments)
 
-    print ('\n\nResults taking median values of fit parameters:')
-    qualityplots(data, params_median, plot_dir=plot_dir, save_figs=save_figs, fn_comments=fn_comments+'_median', title=qp_title+'\\textbf{ (Median)}', vmax=vmax)
+    ### analyze sub-populations of solutions 
+    # zeroaW = np.where((sim_data[4] == 0))[0]
+    # pairfig = pairwise(sim_data, param_labels, title=qp_title+'\\textbf{ - alphaW=0 solns}', save_figs=save_figs, plot_dir=plot_dir, fn_comments=fn_comments, indsop=zeroaW, oplotlabel='$\\alpha_W$=0')
 
-    ### calculate thermal conductivities
-    GmeasU_med, GmeasW_med, GmeasI_med, alphaU_med, alphaW_med, alphaI_med = params_median[0]; sigGU, sigGW, sigGI, sigalphaU, sigalphaW, sigalphaI = params_median[1]
-    print('G_U(420 nm) = ', round(GmeasU_med, 2), ' +/- ', round(sigGU, 2), 'pW/K')
-    print('G_W(400 nm) = ', round(GmeasW_med, 2), ' +/- ', round(sigGW, 2), 'pW/K')
-    print('G_I(400 nm) = ', round(GmeasI_med, 2), ' +/- ', round(sigGI, 2), 'pW/K')
-    print('alpha_U = ', round(alphaU_med, 2), ' +/- ', round(sigalphaU, 2))
-    print('alpha_W = ', round(alphaW_med, 2), ' +/- ', round(sigalphaW, 2))
-    print('alpha_I = ', round(alphaI_med, 2), ' +/- ', round(sigalphaI, 2))
-    print('')    
-    kappaU_med = GtoKappa(GmeasU_med, A_U, L); sigkappaU_med = GtoKappa(sigGU, A_U, L)   # pW / K / um; error analysis is correct because kappa(G) just depends on constants
-    kappaW_med = GtoKappa(GmeasW_med, A_W, L); sigkappaW_med = GtoKappa(sigGW, A_W, L)   # pW / K / um; error analysis is correct because kappa(G) just depends on constants
-    kappaI_med = GtoKappa(GmeasI_med, A_I, L); sigkappaI_med = GtoKappa(sigGI, A_I, L)   # pW / K / um; error analysis is correct because kappa(G) just depends on constants
-    print('Kappa_U: ', round(kappaU_med, 2), ' +/- ', round(sigkappaU_med, 2), ' pW/K/um')
-    print('Kappa_W: ', round(kappaW_med, 2), ' +/- ', round(sigkappaW_med, 2), ' pW/K/um')
-    print('Kappa_I: ', round(kappaI_med, 2), ' +/- ', round(sigkappaI_med, 2), ' pW/K/um')
-    print('G_wire = ', round(Gwire_median, 2), ' +/- ', round(sigma_Gwire, 2), 'pW/K')
+    # aWlim = 1E-5; aUlim = 0.7   # limits to delineate two solution spaces
+    # lowa = np.where((sim_data[4] < aWlim) & (sim_data[3] < aUlim))[0]
+    # pairfig = pairwise(sim_data, param_labels, title=qp_title+'\\textbf{ - $\\boldsymbol{\\mathbf{\\alpha_W<}}$ '+str(aWlim)+' and $\\boldsymbol{\\mathbf{\\alpha_U<}}$ '+str(aUlim)+' Solutions}', save_figs=save_figs, plot_dir=plot_dir, fn_comments=fn_comments+'_overplotlowa', indsop=lowa, oplotlabel='low $\\alpha$')
+    # pairfig = pairwise(sim_data, param_labels, title=qp_title+'\\textbf{ - $\\boldsymbol{\\mathbf{\\alpha_W<}}$ '+str(aWlim)+' and $\\boldsymbol{\\mathbf{\\alpha_U<}}$ '+str(aUlim)+' Solutions}', save_figs=save_figs, plot_dir=plot_dir, fn_comments=fn_comments+'_lowa', indstp=lowa)
 
-    chisq_fit = chisq_val(params_median[0], data)
-    print('Chi-squared value for the fit: ', round(chisq_fit, 3))   
-    vals_med = np.array([params_median[0][0], params_median[0][1], params_median[0][2], params_median[0][3], params_median[0][4], params_median[0][5], kappaU_med, kappaW_med, kappaI_med, Gwire_median, chisq_fit])
-    param_labels = ['G$_U$', 'G$_W$', 'G$_I$', '$\\alpha_U$', '$\\alpha_W$', '$\\alpha_I$']
-    
-    # pairwise correlation plots
-    pairfig = pairwise(sim_data.T, param_labels, title=qp_title, save_figs=save_figs, plot_dir=plot_dir, fn_comments=fn_comments)
+    # higha = np.where((sim_data[4] > aWlim) | (sim_data[3] > aUlim))[0]   # hopefully this removes bimodal solutions
+    # pairfig = pairwise(sim_data, param_labels, title=qp_title+'\\textbf{ - $\\boldsymbol{\\mathbf{\\alpha_W>}}$ '+str(aWlim)+' or $\\boldsymbol{\\mathbf{\\alpha_U>}}$ '+str(aUlim)+' Solutions}', save_figs=save_figs, plot_dir=plot_dir, fn_comments=fn_comments+'_overplothigha', indsop=higha, oplotlabel='high $\\alpha$')
+    # pairfig = pairwise(sim_data, param_labels, title=qp_title+'\\textbf{ - $\\boldsymbol{\\mathbf{\\alpha_W>}}$ '+str(aWlim)+' or $\\boldsymbol{\\mathbf{\\alpha_U>}}$ '+str(aUlim)+' Solutions}', save_figs=save_figs, plot_dir=plot_dir, fn_comments=fn_comments+'_higha', indstp=higha)
+
+    # print('\n\nAnalyzing only HIGH aW and aU solutions:')
+    # results_higha = qualityplots(data, sim_dict, plot_dir=plot_dir, save_figs=save_figs, fn_comments=fn_comments+'_higha', title=qp_title+'\\textbf{, high aW and aU (Mean)}', vmax=vmax, calc='mean', spinds=higha)
+
+    # print('\n\nAnalyzing only LOW aW and aU solutions:')
+    # results_lowa = qualityplots(data, sim_dict, plot_dir=plot_dir, save_figs=save_figs, fn_comments=fn_comments+'_lowa', title=qp_title+'\\textbf{ low aW and aU (Mean)}', vmax=vmax, calc='mean', spinds=lowa)
 
 
-    if save_csv:
+    if save_csv:   # save model results to CSV file
+        vals_mean = np.array([params_mean[0], params_mean[1], params_mean[2], params_mean[3], params_mean[4], params_mean[5], kappas_mean[0], kappas_mean[1], kappas_mean[2], Gwire_mean, chisq_mean])
+        vals_med = np.array([params_med[0], params_med[1], params_med[2], params_med[3], params_med[4], params_med[5], kappas_med[0], kappas_med[1], kappas_med[2], Gwire_med, chisq_med])
+        vals_err = np.array([paramerrs_mean[0], paramerrs_mean[1], paramerrs_mean[2], paramerrs_mean[3], paramerrs_mean[4], paramerrs_mean[5], kappaerrs_mean[0], kappaerrs_mean[1], kappaerrs_mean[2], sigmaGwire_mean, ''])   # should be the same for mean and median
+        
         # write CSV     
         csv_params = np.array(['GU (pW/K)', 'GW (pW/K)', 'GI (pW/K)', 'alphaU', 'alphaW', 'alphaI', 'kappaU (pW/K/um)', 'kappaW (pW/K/um)', 'kappaI (pW/K/um)', 'Gwire (pW/K)', 'Chi-sq val'])
         fields = np.array(['Parameter', 'Mean', 'Median', 'Error'])  
@@ -240,52 +147,6 @@ if quality_plots:   # plot G_x vs alpha_x parameter space with various fit resul
 
 if average_qp:   # check for scattering in full MC simulation vs single run
 
-    def plot_meanqp(p0, data, n_its, param, plot_dir, savefigs=False, fn_comments=''):
-
-        if param == 'U' or param=='W' or param=='I':
-            xgridlim=[0,3]; ygridlim=[0,2]   # alpha_layer vs G_layer 
-            xgrid, ygrid = np.mgrid[xgridlim[0]:xgridlim[1]:100j, ygridlim[0]:ygridlim[1]:100j]
-            xlab = 'G'+param  
-            if param=='U': 
-                gridparams = np.array([xgrid, p0[1]*np.ones_like(xgrid), p0[2]*np.ones_like(xgrid), ygrid, p0[4]*np.ones_like(ygrid), p0[5]*np.ones_like(ygrid)]).T
-                ylab = 'a$_U$'
-            elif param=='W': 
-                gridparams = np.array([p0[0]*np.ones_like(xgrid), xgrid, p0[2]*np.ones_like(xgrid), p0[3]*np.ones_like(ygrid), ygrid, p0[5]*np.ones_like(ygrid)]).T
-                ylab = 'a$_W$'
-            elif param=='I': 
-                gridparams = np.array([p0[0]*np.ones_like(xgrid), p0[1]*np.ones_like(xgrid), xgrid, p0[3]*np.ones_like(ygrid), p0[4]*np.ones_like(ygrid), ygrid]).T
-                ylab = 'a$_I$'
-
-        funcgrid = calc_func_grid(gridparams, data)
-
-        plt.figure()   # G vs alpha parameter space, single run 
-        im = plt.imshow(funcgrid, cmap=plt.cm.RdBu, vmin=0, vmax=1E3, extent=[min(xgridlim), max(xgridlim), min(ygridlim), max(ygridlim)], origin='lower') 
-        plt.colorbar(im)
-        plt.title('Function Values in 2D Param Space')
-        plt.xlabel(xlab)
-        plt.ylabel(ylab)
-        if savefigs: plt.savefig(plot_dir + 'funcqualityplot_' + param + fn_comments + '.png', dpi=300)
-
-        funcgridU_sim = np.empty((n_its, len(funcgrid[0]), len(funcgrid[1])))
-        y_its = np.empty((n_its, len(ydata)))
-        for ii in np.arange(n_its):   # run simulation
-            y_its[ii] = np.random.normal(ydata, sigma)   # pull G's from normal distribution characterized by fit error
-            data_it = [y_its[ii], sigma]   
-            funcgridU_sim[ii] = calc_func_grid(gridparams, data_it)   # calculate function value with simulated y-data
-
-        funcgrid_mean = np.mean(funcgridU_sim, axis=0)
-
-        plt.figure()   # G vs alpha parameter space
-        im = plt.imshow(funcgrid_mean, cmap=plt.cm.RdBu, vmin=0, vmax=1E3, extent=[min(xgridlim), max(xgridlim), min(ygridlim), max(ygridlim)], origin='lower', alpha=0.8) 
-        plt.colorbar(im)
-        plt.xlabel(xlab)
-        plt.ylabel(ylab)
-        plt.title('Mean Func Vals, N$_{its}$ = %d'%n_its) 
-        # plt.xlim(xgridlim[0], xgridlim[1]); plt.ylim(ygridlim[0], ygridlim[1])
-        if savefigs: plt.savefig(plot_dir + 'meanfuncqualityplot_' + param + fn_comments + '.png', dpi=300)
-    
-        return funcgrid, funcgrid_mean
-
     funcgrid_U, funcgridmean_U = plot_meanqp(p0, data, n_its, 'U', plot_dir, savefigs=save_figs, fn_comments=fn_comments)
     funcgrid_W, funcgridmean_W = plot_meanqp(p0, data, n_its, 'W', plot_dir, savefigs=save_figs, fn_comments=fn_comments)
     funcgrid_I, funcgridmean_I = plot_meanqp(p0, data, n_its, 'I', plot_dir, savefigs=save_figs, fn_comments=fn_comments)
@@ -296,10 +157,20 @@ if lit_compare:
     ### load fit results
     with open(sim_file, 'rb') as infile:   # load simulation pkl
         sim_dict = pkl.load(infile)
-    if 'inf' in sim_file:
-        sim_results = [np.median(sim_dict['sim'], axis=0), np.std(sim_dict['sim'], axis=0)]   # take median value instead of mean for alpha=[0,inf] model
+    # if 'inf' in sim_file:
+    #     sim_results = [np.median(sim_dict['sim'], axis=0), np.std(sim_dict['sim'], axis=0)]   # take median value instead of mean for alpha=[0,inf] model
+    # else:
+    #     sim_results = [sim_dict['fit']['fit_params'], sim_dict['fit']['fit_std']]
+    # sim_dataT = sim_dict['sim']; sim_data = sim_dataT.T
+    if calc=='mean':
+        print('\nCalculating fit parameters as the mean of the simulation values.\n')
+        sim_results = [np.mean(sim_dict['sim'], axis=0), np.std(sim_dict['sim'], axis=0)]
+    elif calc=='median':
+        print('\nCalculating fit parameters as the median of the simulation values.\n')
+        sim_results = [np.median(sim_dict['sim'], axis=0), np.std(sim_dict['sim'], axis=0)]
     else:
-        sim_results = [sim_dict['fit']['fit_params'], sim_dict['fit']['fit_std']]
+        print('Unknown parameter calculation method. Choose "mean" or "median".')
+
 
     Gmeas_U, Gmeas_W, Gmeas_I, alpham_U, alpham_W, alpham_I = sim_results[0]; sigGU, sigGW, sigGI, sigalpha, sigalphaW, sigalphaI = sim_results[1]
     kappam_U = GtoKappa(Gmeas_U, A_U, L); sigkappam_U = GtoKappa(sigGU, A_U, L)   # pW / K / um; error analysis is correct because kappa(G) just depends on constants
@@ -502,58 +373,47 @@ if lit_compare:
 
 if compare_legacy:   # compare G predictions with NIST legacy data
 
+    # load fit 
+    with open(sim_file, 'rb') as infile:   # load simulation pkl
+        sim_dict = pkl.load(infile)
+    simresults_mean = np.array([np.mean(sim_dict['sim'], axis=0), np.std(sim_dict['sim'], axis=0)])
+    simresults_med = np.array([np.median(sim_dict['sim'], axis=0), np.std(sim_dict['sim'], axis=0)])
+
+    if np.isinf(alim[1]):
+        plot_comments = '_unconstrained'
+        title='Predictions from Model, $\\alpha \\in [0,\\infty)$'
+    else:
+        plot_comments = '_constrained'
+        title='Predictions from Model, $\\alpha \\in [0,1]$'
+    sim_dataT = sim_dict['sim']; sim_data = sim_dataT.T
+
     L = 220   # bolotest leg length, um
-    boloGs = ydata_170mK; sigma_boloGs = sigma_170mK   # choose bolotest G's to compare
+    boloGs = ydata; sigma_boloGs = sigma   # choose bolotest G's to compare
     wstack_width = (5*0.100+3*0.285)/(0.100+0.285)   # um, effective width of W1 W2 stack on bolo 20
     A_bolo = np.array([(7*4*.420+5*4*.160+3*4*.340+7*4*.350+7*4*.400), (7*1*.420+7*3*.340+5*.160+3*.340+7*.350+7*.400), (7*2*.420+7*2*.340+5*2*.160+3*2*.340+7*2*.350+7*2*.400), (7*3*.420+7*1*.340+5*3*.160+3*3*.340+7*3*.350+7*3*.400), (7*1*.420+7*3*.400+5*1*.160+3*1*.285+7*3*.370+7*1*.350), (7*4*.420+5*1*.160+wstack_width*3*.385+3*1*.285+7*1*.340), (7*3*.420+7*1*.400+5*3*.160+3*1*3.340+7*3*.350+7*1*.670+7*3*.400), (7*1*.420+7*3*.400+5*1*.160+3*1*.285+7*1*.350) ])   # bolotest areas
-    # ASiN = np.array([(7*4*.300), (7*1*.300+7*3*.220), (7*2*.300+7*2*.220), (7*3*.300+7*1*.220), (7*1*.300+7*3*.280), (7*4*.300), (7*3*.300+7*1*.280), (7*1*.300+7*3*.280)])   # area of 4 nitride beams
     AoL_bolo = A_bolo/L   # A/L for bolotest devices
+    data1b=np.array([ydata[0], sigma[0]]) if bolo1b else []  # plot bolo1b data?
 
-    dW1 = .190; dI1 = .350; dW2 = .400; dI2 = .400   # general film thicknesses, um
-    # dmicro = dW1 + dI1 + dW2 + dI2   
-    legacy_Gs = np.array([1296.659705, 276.1, 229.3, 88.3, 44, 76.5, 22.6, 644, 676, 550, 125, 103, 583, 603, 498, 328, 84, 77, 19, 12.2, 10.5, 11.7, 13.1, 9.98, 16.4, 8.766, 9.18, 8.29, 9.57, 7.14, 81.73229733, 103.2593154, 106.535245, 96.57474779, 90.04141806, 108.616653, 116.2369491, 136.2558345, 128.6066776, 180.7454359, 172.273248, 172.4456603, 192.5852409, 12.8, 623, 600, 620, 547, 636, 600.3, 645, 568, 538.7, 491.3, 623, 541.2, 661.4, 563.3, 377.3, 597.4, 395.3, 415.3, 575, 544.8, 237.8, 331.3, 193.25, 331.8, 335.613, 512.562, 513.889, 316.88, 319.756, 484.476, 478.2, 118.818, 117.644, 210.535, 136.383, 130.912, 229.002, 236.02, 101.9, 129.387, 230.783, 230.917, 130.829, 127.191, 232.006, 231.056])  
-    legacy_ll = np.array([250, 61, 61, 219.8, 500, 500, 1000, 50, 50, 50, 100, 300, 50, 50, 50, 100, 100, 300, 500, 1000, 1000, 1000, 1000, 1250, 500, 1000, 1000, 1000, 1000, 1250, 640, 510, 510, 510, 510, 510, 730, 610, 490, 370, 370, 370, 300, 500, 50, 50, 50, 50, 50, 50, 50, 50, 50, 50, 50, 50, 50, 50, 50, 50, 50, 50, 50, 50, 50, 50, 50, 50, 50, 50, 50, 50, 50, 50, 50, 100, 100, 100, 100, 100, 100, 100, 100, 100, 100, 100, 100, 100, 100, 100])
-    legacy_lw = np.array([25, 14.4, 12.1, 10, 10, 15, 10, 41.5, 41.5, 34.5, 13, 16.5, 41.5, 41.5, 34.5, 29, 13, 16.5, 10, 10, 10, 10, 10, 10, 10, 10, 10, 10, 10, 10, 7, 7, 7, 7, 7, 7, 10, 10, 8, 8, 8, 8, 8, 6, 41.5, 41.5, 41.5, 41.5, 41.5, 41.5, 41.5, 41.5, 34.5, 34.5, 41.5, 41.5, 34.5, 34.5, 23.6, 37.5, 23.6, 23.6, 37.5, 37.5, 13.5, 21.6, 13.5, 21.6, 23.6, 37.5, 37.5, 23.6, 23.6, 37.5, 37.5, 11.3, 11.3, 18.5, 11.3, 11.3, 18.5, 18.5, 11.3, 11.3, 18.5, 18.5, 11.3, 11.3, 18.5, 18.5])
-    legacy_dsub = 0.450 + np.array([1, 2, 2, 2, 2, 2, 2, 2, 2, 2, 2, 2, 2, 2, 2, 2, 2, 2, 2, 2, 2, 2, 2, 2, 2, 2, 2, 2, 2, 2, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 2, 2, 2, 2, 2, 2, 2, 2, 2, 2, 2, 2, 2, 2, 2, 2, 2, 2, 2, 2, 2, 2, 2, 2, 2, 2, 2, 2, 2, 2, 2, 2, 2, 2, 2, 2, 2, 2, 2, 2, 2, 2, 2, 2, 2, 2])
-    legacy_Tcs = np.array([557, 178.9, 178.5, 173.4, 170.5, 172.9, 164.7, 163, 162, 163, 164, 164, 168, 168, 167, 167, 165, 166, 156, 158, 146, 146, 149, 144, 155, 158, 146, 141, 147, 141, 485.4587986, 481.037173, 484.9293596, 478.3771521, 475.3010335, 483.4209782, 484.0258522, 477.436482, 483.5417917, 485.8804622, 479.8911157, 487.785816, 481.0323883, 262, 193, 188, 188.8, 188.2, 190.2, 188.1, 186.5, 184.5, 187.5, 185.5, 185.8, 185.6, 185.7, 183.3, 167.3, 167, 172.9, 172.8, 166.61, 162.33, 172.87, 161.65, 163.06, 166.44, 177.920926, 178.955154, 178.839062, 177.514658, 177.126927, 178.196297, 177.53632, 169.704602, 169.641018, 173.026393, 177.895192, 177.966456, 178.934122, 180.143125, 177.16833, 178.328865, 179.420334, 179.696264, 172.724501, 172.479515, 177.385267, 177.492689])*1E-3
-    legacy_ns = np.array([3.5, 3.4, 3.4, 3, 2.8, 3, 2.7, 3, 3, 3, 3, 3, 3, 3, 3, 3, 3, 3, 3, 3, 3, 3, 3, 3, 3, 3, 3, 3, 3, 3, 2.707252717, 2.742876666, 2.741499631, 2.783995279, 2.75259088, 2.796872814, 2.747211811, 2.782265754, 2.804876038, 2.879595447, 2.871133545, 2.889243695, 2.870571891, 2.6, 3, 3, 3, 3, 3, 3, 3, 3, 3, 3, 3, 3, 3, 3, 3, 3, 3, 3, 3, 3, 3, 3, 3, 3, 3, 3, 3, 3, 3, 3, 3, 3, 3, 3, 3, 3, 3, 3, 3, 3, 3, 3, 3, 3, 3, 3])
-    legacy_Gs170 = scale_G(.170, legacy_Gs, legacy_Tcs, legacy_ns)   # scale G's to Tc of 170 mK
-    # legacy_A = 4*(legacy_dsub + dmicro)*legacy_lw   # um^2, area for four legs, thickness is substrate + wiring stack
-    legacy_w1w, legacy_w2w = wlw(legacy_lw)
-    legacy_A = 4*(legacy_dsub + dI1 + dI2)*legacy_lw + 4*dW1*legacy_w1w + 4*dW2*legacy_w2w   # um^2, area for four legs, thickness is substrate + wiring stack
-    legacy_AoLs = legacy_A/legacy_ll  # um
-     
-    lTcinds = np.where(legacy_Tcs<0.200)[0]   # Tc<200 mK bolometers from Shannon's data
-    hTcinds = np.where(legacy_Tcs>=0.200)[0]   # Tc<200 mK bolometers from Shannon's data
-    legacy_geom = np.array([legacy_dsub[lTcinds], legacy_lw[lTcinds], legacy_ll[lTcinds]])
-    legacy_data = np.array([legacy_AoLs[lTcinds], legacy_Gs170[lTcinds]])
+    predict_Glegacy(simresults_mean, data1b=data1b, save_figs=save_figs, title=title+' (Mean)', plot_comments=plot_comments+'_mean', fs=(7,7))
+    predict_Glegacy(simresults_med, data1b=data1b, save_figs=save_figs, title=title+' (Median)', plot_comments=plot_comments+'_median')
+    # (G_layer(simresults_mean, dI1, layer='I') + G_layer(simresults_mean, dI2, layer='I')) *lw/7 *220/ll   # not sure what this was for?
 
-    title='Predictions from Model, Restricted $\\alpha$'
-    plot_comments = '_a01_mean'
-    fit = ([p0_a01, sigmap0_a01])
-    predict_G(fit, legacy_data, legacy_geom, bolo1b=False, save_figs=save_figs, title=title, plot_comments=plot_comments, fs=(7,7))
+    # title="Predictions from Layer $\kappa$'s"
+    # plot_comments = '_kappa'
+    # predict_Glegacy(simresults_mean, data1b=data1b, save_figs=save_figs, estimator='kappa', title=title+' (Mean)', plot_comments=plot_comments)
 
-    title='Predictions from Model, Unrestricted $\\alpha$'
-    plot_comments = '_a0inf_median'
-    fit = ([p0_a0inf_median, sigmap0_a0inf_median])
-    predict_G(fit, legacy_data, legacy_geom, bolo1b=False, save_figs=save_figs, title=title, plot_comments=plot_comments)
-    (G_layer(fit, dI1, layer='I') + G_layer(fit, dI2, layer='I')) *lw/7 *220/ll
-    # title='Predictions from Model, Unrestricted $\\alpha$ (Mean)'
-    # plot_comments = '_a0inf_mean'
-    # fit = ([p0_a0inf, sigmap0_a0inf])
-    # predict_G(fit, legacy_data, legacy_geom, bolo1b=False, save_figs=save_figs, title=title, plot_comments=plot_comments)
-
-    title="Predictions from Layer $\kappa$'s"
-    plot_comments = '_kappa'
-    predict_G(fit, legacy_data, legacy_geom, bolo1b=False, save_figs=save_figs, estimator='kappa', title=title, plot_comments=plot_comments)
-
-
+    
 if design_implications:   # making plots to illustrate TES and NIS design implications of this work
-
 
     ### plot G_TES and TFN as a function of substrate width
     # fit_params = p0_a0inf_median; sig_params = sigmap0_a0inf_median
-    fit = np.array([p0_a0inf_median, sigmap0_a0inf_median])
+    # fit = np.array([p0_a0inf_median, sigmap0_a0inf_median])
+    with open(sim_file, 'rb') as infile:   # load simulation pkl
+        sim_dict = pkl.load(infile)
+    simresults_mean = np.array([np.mean(sim_dict['sim'], axis=0), np.std(sim_dict['sim'], axis=0)])
+    simresults_med = np.array([np.median(sim_dict['sim'], axis=0), np.std(sim_dict['sim'], axis=0)])
+    sim_results = simresults_mean if calc=='mean' else simresults_med
+
     lwidths = np.linspace(0.1, 100/7, num=100)   # um
     # llength = 220*np.ones_like(lwidths)   # um
     # dsub = .420*np.ones_like(lwidths)   # um    
@@ -572,11 +432,11 @@ if design_implications:   # making plots to illustrate TES and NIS design implic
     
     A_full = A_1b(lwidths, layer='wiring'); A_W1 = A_1b(lwidths, layer='W1'); A_bare = A_1b(lwidths, layer='bare')   # areas of different film stacks
 
-    G_full, Gerr_full = Gfrommodel(fit, dsub, lwidths, llength, layer='total', fab='bolotest')
-    G_U, Gerr_U = Gfrommodel(fit, dsub, lwidths, llength, layer='U', fab='bolotest')
-    G_W1, Gerr_W1 = Gfrommodel(fit, dsub, lwidths, llength, layer='W1', fab='bolotest')
+    G_full, Gerr_full = Gfrommodel(sim_results, dsub, lwidths, llength, layer='total', fab='bolotest')
+    G_U, Gerr_U = Gfrommodel(sim_results, dsub, lwidths, llength, layer='U', fab='bolotest')
+    G_W1, Gerr_W1 = Gfrommodel(sim_results, dsub, lwidths, llength, layer='W1', fab='bolotest')
     G_Nb200 = G_U+G_W1; Gerr_Nb200 = Gerr_U+Gerr_W1
-    G_bare, Gerr_bare = Gfrommodel(fit, .340, lwidths, llength, layer='U', fab='bolotest')   # bare substrate is thinner from etching steps
+    G_bare, Gerr_bare = Gfrommodel(sim_results, .340, lwidths, llength, layer='U', fab='bolotest')   # bare substrate is thinner from etching steps
 
     NEP_full = TFNEP(Tbath, G_full*1E-12)*1E18; NEPerr_full = TFNEP(Tbath, Gerr_full*1E-12)*1E18   # aW / rtHz; Kenyan 2006 measured 1E-17 for a TES with comparable G at 170 mK
     NEP_W1 = TFNEP(Tbath, G_Nb200*1E-12)*1E18; NEPerr_W1 = TFNEP(Tbath, Gerr_Nb200*1E-12)*1E18   # aW / rtHz; Kenyan 2006 measured 1E-17 for a TES with comparable G at 170 mK
@@ -655,8 +515,7 @@ if design_implications:   # making plots to illustrate TES and NIS design implic
     # xover_dsub = fsolve(xover_finder, 1, args=(np.stack(([p0]*len(lwidths)),axis=0), lwidths, np.ones_like(lwidths)*ll_test))[0]   # um
     # xover_dsub = fsolve(xover_finder, 1, args=(np.stack(([p0]*len(lwidths)),axis=0)[0], lwidths[0], (np.ones_like(lwidths)*ll_test)[0]))[0]   # um
     # fsolve(xover_finder, 1, args=(np.stack(([p0]*len(lwidths)),axis=0), lwidths, (np.ones_like(lwidths)*ll_test)))[0]
-    xover_dsub = fsolve(xover_finder, ll_test, args=(fit, lw_test, ll_test))[0]
-
+    xover_dsub = fsolve(xover_finder, ll_test, args=(sim_results, lw_test, ll_test))[0]
 
 
 if load_and_plot:   # for loading a simulation and replotting things; kinda scrap
@@ -764,5 +623,102 @@ if scrap:
     result = fmodel.fit(y, x=x, a=14, b=3.9, mo=0.8, q=0.002)
     sim_result = minimize(chisq_val, p0, args=[ydata, sigma], bounds=bounds)
     curve_fit(self.powerlaw_fit_func, temperatures, powerAtRns[index], p0=init_guess, sigma=sigma[index], absolute_sigma=True) 
+
+if bimodal_solns:
+
+    with open(sim_file, 'rb') as infile:   # load simulation pkl
+        sim_dict = pkl.load(infile)
+    sim_dataT = sim_dict['sim']; sim_data = sim_dataT.T   # simulation parameter values
+    param_labels = ['G$_U$', 'G$_W$', 'G$_I$', '$\\alpha_U$', '$\\alpha_W$', '$\\alpha_I$']
+
+    if np.isinf(alim[1]):   # quality plot title
+        qp_title = '$\\boldsymbol{\\mathbf{\\alpha \\in [0,\infty)}}$'   # title for 1x3 quality plots
+    else:
+        qp_title = '$\\boldsymbol{\\mathbf{\\alpha \in [0,'+str(alim[1])+']}}$'   # title for 1x3 quality plots
+
+    ### pairwise correlation plots
+    pairfig = pairwise(sim_data, param_labels, title=qp_title, save_figs=save_figs, plot_dir=plot_dir, fn_comments=fn_comments)
+
+    # ### analyze sub-populations of solutions 
+    aWlim = 1E-5; aUlim = 0.7   # limits to delineate two solution spaces
+    lowa = np.where((sim_data[4] < aWlim) & (sim_data[3] < aUlim))[0]
+    # pairfig = pairwise(sim_data, param_labels, title=qp_title+'\\textbf{ - $\\boldsymbol{\\mathbf{\\alpha_W<}}$ '+str(aWlim)+' and $\\boldsymbol{\\mathbf{\\alpha_U<}}$ '+str(aUlim)+' Solutions}', save_figs=save_figs, plot_dir=plot_dir, fn_comments=fn_comments+'_overplotlowa', indsop=lowa, oplotlabel='low $\\alpha$')
+    # pairfig = pairwise(sim_data, param_labels, title=qp_title+'\\textbf{ - $\\boldsymbol{\\mathbf{\\alpha_W<}}$ '+str(aWlim)+' and $\\boldsymbol{\\mathbf{\\alpha_U<}}$ '+str(aUlim)+' Solutions}', save_figs=save_figs, plot_dir=plot_dir, fn_comments=fn_comments+'_lowa', indstp=lowa)
+
+    higha = np.where((sim_data[4] > aWlim) | (sim_data[3] > aUlim))[0]   # hopefully this removes bimodal solutions
+    # pairfig = pairwise(sim_data, param_labels, title=qp_title+'\\textbf{ - $\\boldsymbol{\\mathbf{\\alpha_W>}}$ '+str(aWlim)+' or $\\boldsymbol{\\mathbf{\\alpha_U>}}$ '+str(aUlim)+' Solutions}', save_figs=save_figs, plot_dir=plot_dir, fn_comments=fn_comments+'_overplothigha', indsop=higha, oplotlabel='high $\\alpha$')
+    # pairfig = pairwise(sim_data, param_labels, title=qp_title+'\\textbf{ - $\\boldsymbol{\\mathbf{\\alpha_W>}}$ '+str(aWlim)+' or $\\boldsymbol{\\mathbf{\\alpha_U>}}$ '+str(aUlim)+' Solutions}', save_figs=save_figs, plot_dir=plot_dir, fn_comments=fn_comments+'_higha', indstp=higha)
+
+    print('\n\nAnalyzing only HIGH aW and aU solutions:')
+    results_higha = qualityplots(data, sim_dict, plot_dir=plot_dir, save_figs=save_figs, fn_comments=fn_comments+'_higha', title=qp_title+'\\textbf{, high aW and aU (Mean)}', vmax=vmax, calc='mean', spinds=higha, plot=False)
+    params_higha, paramerrs_higha, kappas_med, kappaerrs_med, Gwire_med, sigmaGwire_med, chisq_med = results_higha
+    fit_higha = np.array([params_higha, paramerrs_higha])
+
+    print('\n\nAnalyzing only LOW aW and aU solutions:')
+    results_lowa = qualityplots(data, sim_dict, plot_dir=plot_dir, save_figs=save_figs, fn_comments=fn_comments+'_lowa', title=qp_title+'\\textbf{ low aW and aU (Mean)}', vmax=vmax, calc='mean', spinds=lowa, plot=False)
+    params_lowa, paramerrs_lowa, kappas_med, kappaerrs_med, Gwire_med, sigmaGwire_med, chisq_med = results_lowa
+    fit_lowa = np.array([params_lowa, paramerrs_lowa])
+
+    ### compare legacy predictions
+    data1b=np.array([ydata[0], sigma[0]]) if bolo1b else []  # plot bolo1b data?
+
+    predict_Glegacy(fit_higha, data1b=data1b, save_figs=save_figs, title=qp_title+' (High Alpha)', plot_comments=plot_comments+'_higha', fs=(7,7))
+    predict_Glegacy(fit_lowa, data1b=data1b, save_figs=save_figs, title=qp_title+' (Low Alpha)', plot_comments=plot_comments+'_lowa')
+
+    aWlim = 1.5E-4; GUlim = 0.63   # limits to delineate two solution spaces
+    lowGU = np.where((sim_data[4] < aWlim) & (sim_data[0] < GUlim))[0]
+    # pairfig = pairwise(sim_data, param_labels, title=qp_title+'\\textbf{ - $\\boldsymbol{\\mathbf{G_U<}}$ '+str(GUlim)+' pW/K Solutions}', save_figs=save_figs, plot_dir=plot_dir, fn_comments=fn_comments+'_overplotlowGU', indsop=lowGU, oplotlabel='low GU')
+    # pairfig = pairwise(sim_data, param_labels, title=qp_title+'\\textbf{ - $\\boldsymbol{\\mathbf{\\alpha_W<}}$ '+str(aWlim)+' and $\\boldsymbol{\\mathbf{\\alpha_U<}}$ '+str(aUlim)+' Solutions}', save_figs=save_figs, plot_dir=plot_dir, fn_comments=fn_comments+'_lowGU', indstp=lowGU)
+
+    highGU = np.where((sim_data[4] > aWlim) | (sim_data[0] > GUlim))[0]
+    # pairfig = pairwise(sim_data, param_labels, title=qp_title+'\\textbf{ - $\\boldsymbol{\\mathbf{G_U>}}$ '+str(GUlim)+' pW/K Solutions}', save_figs=save_figs, plot_dir=plot_dir, fn_comments=fn_comments+'_overplotlowGU', indsop=highGU, oplotlabel='high GU')
+    # pairfig = pairwise(sim_data, param_labels, title=qp_title+'\\textbf{ - $\\boldsymbol{\\mathbf{\\alpha_W>}}$ '+str(aWlim)+' or $\\boldsymbol{\\mathbf{\\alpha_U>}}$ '+str(aUlim)+' Solutions}', save_figs=save_figs, plot_dir=plot_dir, fn_comments=fn_comments+'_higha', indstp=higha)
+
+    print('\n\nAnalyzing only HIGH GU solutions:')
+    results_highGU = qualityplots(data, sim_dict, plot_dir=plot_dir, save_figs=save_figs, fn_comments=fn_comments+'_highGU', title=qp_title+'\\textbf{, High GU (Mean)}', vmax=vmax, calc='mean', spinds=highGU, plot=False)
+    params_highGU, paramerrs_highGU, kappas_med, kappaerrs_med, Gwire_med, sigmaGwire_med, chisq_med = results_highGU
+    fit_highGU = np.array([params_highGU, paramerrs_highGU])
+
+    print('\n\nAnalyzing only LOW GU solutions:')
+    results_lowGU = qualityplots(data, sim_dict, plot_dir=plot_dir, save_figs=save_figs, fn_comments=fn_comments+'_lowGU', title=qp_title+'\\textbf{, Low GU (Mean)}', vmax=vmax, calc='mean', spinds=lowGU, plot=False)
+    params_lowGU, paramerrs_lowGU, kappas_med, kappaerrs_med, Gwire_med, sigmaGwire_med, chisq_med = results_lowGU
+    fit_lowGU = np.array([params_lowGU, paramerrs_lowGU])
+
+    # compare legacy predictions
+    predict_Glegacy(fit_highGU, data1b=data1b, save_figs=save_figs, title=qp_title+' (High GU)', plot_comments=plot_comments+'_highGU', fs=(7,7))
+    predict_Glegacy(fit_lowGU, data1b=data1b, save_figs=save_figs, title=qp_title+' (Low GU)', plot_comments=plot_comments+'_lowGU')
+
+if compare_modelanddata:
+
+    with open(sim_file, 'rb') as infile:   # load simulation pkl
+        sim_dict = pkl.load(infile)
+    sim_dataT = sim_dict['sim']; sim_data = sim_dataT.T   # simulation parameter values
+    simresults_mean = np.array([np.mean(sim_dict['sim'], axis=0), np.std(sim_dict['sim'], axis=0)])
+    simresults_med = np.array([np.median(sim_dict['sim'], axis=0), np.std(sim_dict['sim'], axis=0)])
+
+    if np.isinf(alim[1]):   # quality plot title
+        title = '$\\boldsymbol{\\mathbf{\\alpha \\in [0,\infty)}}$'   # plot title
+    else:
+        title = '$\\boldsymbol{\\mathbf{\\alpha \in [0,'+str(alim[1])+']}}$'   # plot title
+
+    plot_modelvdata(simresults_mean, data, title=title+' (Mean)')
+
+    # check subsections of solutions
+    aWlim = 1.5E-4; GUlim = 0.63   # limits to delineate two solution spaces
+    lowGU = np.where((sim_data[4] < aWlim) & (sim_data[0] < GUlim))[0]
+    highGU = np.where((sim_data[4] > aWlim) | (sim_data[0] > GUlim))[0]
+
+    results_highGU = qualityplots(data, sim_dict, plot_dir=plot_dir, save_figs=save_figs, fn_comments=fn_comments+'_highgu', title=title+'\\textbf{, high aW and aU (Mean)}', vmax=vmax, calc='mean', spinds=highGU, plot=False)
+    params_highGU, paramerrs_highGU, kappas_med, kappaerrs_med, Gwire_med, sigmaGwire_med, chisq_med = results_highGU
+    fit_highGU = np.array([params_highGU, paramerrs_highGU])
+
+    # print('\n\nAnalyzing only LOW aW and aU solutions:')
+    results_lowGU = qualityplots(data, sim_dict, plot_dir=plot_dir, save_figs=save_figs, fn_comments=fn_comments+'_lowGU', title=title+'\\textbf{ low aW and aU (Mean)}', vmax=vmax, calc='mean', spinds=lowGU, plot=False)
+    params_lowGU, paramerrs_lowGU, kappas_med, kappaerrs_med, Gwire_med, sigmaGwire_med, chisq_med = results_lowGU
+    fit_lowGU = np.array([params_lowGU, paramerrs_lowGU])
+
+    plot_modelvdata(fit_lowGU, data, title=title+', Low GU Solns')
+    plot_modelvdata(fit_highGU, data, title=title+', High GU Solns')
+
 
 plt.show()
