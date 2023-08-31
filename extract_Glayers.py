@@ -11,7 +11,11 @@ aharkehosemann@gmail.com
 UPDATES
 2023/07/12: quote mean values, note bimodality and put total population in SI but note two populations share the same chi-squared
 
-TODO: redo six-layer fit to compare chi-squared values?
+2023/08/09: Added non-equilibrium correction to TF NEP calculation
+
+2023/08/11: There was probably a bookkeeping error during bolotest measurements that swapped Pads 10 and 11 = bolo1c and bolo1b measurements with more BLING. 
+
+TODO: redo six-layer fit to compare chi-squared values?; change kappa dependence on width for W2 layer?
 """
 from bolotest_routines import *
 from scipy.optimize import fsolve
@@ -21,49 +25,84 @@ import csv
 ### User Switches
 # choose analysis
 run_sim = False   # run MC simulation for fitting model
-quality_plots = False   # results on G_x vs alpha_x parameter space for each layer
+quality_plots = True   # results on G_x vs alpha_x parameter space for each layer
 random_initguess = False   # try simulation with randomized initial guesses
 average_qp = False   # show average value for 2D quality plot over MC sim to check for scattering
 lit_compare = False   # compare measured conductivities with literature values
 compare_legacy = False   # compare with NIST sub-mm bolo legacy data
 design_implications = False
 load_and_plot = False   # scrap; currently replotting separate quality plots into a 1x3 subplot figure
+bimodal_solns = False   # compare results of two minima in parameter space found in unconstrained model
+compare_modelanddata = True   # plot model predictions and bolotest data
+analyze_vlengthdata = False
+byeye = False   # pick parameters manually and compare fits
 scrap = False
-bimodal_solns = True
-compare_modelanddata = False   # plot model predictions and bolotest data
 
 # options
-save_figs = False   
-save_sim = False   # save full simulation
-save_csv = False   # save csv file of resulting parameters
+save_sim = True   # save full simulation
+save_figs = True   
+save_csv = True   # save csv file of resulting parameters
 show_plots = False   # show simulated y-data plots during MC simulation
 calc_Gwire = False   # calculate G of the wiring stack if it wasn't saved during the simulation
 latex_fonts = True
+constrained = False   # use constrained model results
 
-n_its = int(1E4)   # number of iterations for MC simulation
-num_guesses = 100   # number of randomized initial guesses to try
+n_its = int(1E3)   # number of iterations for MC simulation
+# num_guesses = 100   # number of randomized initial guesses to try
 analysis_dir = '/Users/angi/NIS/Bolotest_Analysis/'
-# fn_comments = '_alpha0inf_1E4iteratinos_fitGconstantTTES_nobling_constrained'   # first go at getting errors, errors pulled from _errorcompare_master, incorrect sigma_I (mean not subtracted from and n-term in sigma_G)
-# alim = [0,1]   # limits for fitting alpha
-fn_comments = '_alpha0inf_1E4iteratinos_fitGconstantTTES_nobling'   # first go at getting errors, errors pulled from _errorcompare_master, incorrect sigma_I (mean not subtracted from and n-term in sigma_G)
-alim = [0, np.inf]   # limits for fitting alpha
+# fn_comments = '_alpha0inf_1E4iteratinos_fitGconstantTTES_nobling_constrained'; alim = [0,1]   # fitting in [0,1]
+# fn_comments = '_alpha0inf_1E4iteratinos_fitGconstantTTES_nobling'; alim = [0, np.inf]   # fitting in [0,infinity)
+# fn_comments = '_alphan1top1'; alim = [-1, 1]   # fitting alpha in [-1,1]
+# fn_comments = '_alphaninfpinf'; alim = [-np.inf, np.inf]   # fitting alpha in (-infinity,infinity)
+# fn_comments = '_alpha0inf_lessbling_varythickness'; alim = [0, np.inf]   # fitting where film thicknesses are allowed to vary
+# fn_comments = '_alphaninfpinf_varythickness'; alim = [-np.inf, np.inf]   # fitting manually changing film thicknesses
+# fn_comments = '_alphaninfpinf_Gerr5percent'; alim = [-np.inf, np.inf]   # fitting where sigmaG is a % of the value
+# fn_comments = '_alphaninfpinf_Gerr3p5percent'; alim = [-np.inf, np.inf]   # fitting where sigmaG is a % of the value
+# fn_comments = '_alphan1p1_Gerr3p5percent'; alim = [-1, 1]; sigmaG_frac = 0.035   # fitting where sigmaG is a % of the value
+# fn_comments = '_alphan2p2_Gerr3p33percent'; alim = [-2, 2]; sigmaG_frac = 0.0333   # fitting where sigmaG is a % of the value
+# fn_comments = '_alphaninfpinf_Gerr3p33percent'; alim = [-np.inf, np.inf]; sigmaG_frac = 0.0333   # fitting where sigmaG is a % of the value
+# fn_comments = '_alphan2p2_Gerr1percent'; alim = [-2, 2]; sigmaG_frac = 0.01   # fitting where sigmaG is a % of the value
+# fn_comments = '_alphaninfpinf_Gerr1percent'; alim = [-np.inf, np.inf]; sigmaG_frac = 0.01   # fitting where sigmaG is a % of the value
+# fn_comments = '_alphaninfpinf_Gerr2p4percent'; alim = [-np.inf, np.inf]; sigmaG_frac = 0.024   # 2.4% = average std/mean GTES for bolos 26 and 7
+# fn_comments = '_alphan2p2_Gerr2p4percent'; alim = [-2, 2]; sigmaG_frac = 0.024   # 2.4% = average std/mean GTES for bolos 26 and 7
+# fn_comments = '_alphan1p1_Gerr2p4percent'; alim = [-1, 1]; sigmaG_frac = 0.024   # 2.4% = average std/mean GTES for bolos 26 and 7
+# fn_comments = '_alphaninfpinf_Gerr0p8percent'; alim = [-np.inf, np.inf]; sigmaG_frac = 0.008   # 0.8% = std/mean GTES of bolo 7
+# fn_comments = '_alphan2p2_Gerr0p8percent'; alim = [-2, 2]; sigmaG_frac = 0.008   # 0.8% = std/mean GTES of bolo 7
+# fn_comments = '_alphan1p1_Gerr0p8percent'; alim = [-1, 1]; sigmaG_frac = 0.008   # 0.8% = std/mean GTES of bolo 7
+# fn_comments = '_alphaninfpinf_varythickness_0percent'; alim = [-np.inf, np.inf]   # 0.8% = std/mean GTES of bolo 7
+# fn_comments = '_alphaninfpinf_varythickness_0p1percent'; alim = [-np.inf, np.inf]   # 0.8% = std/mean GTES of bolo 7
+# fn_comments = '_alphaninfpinf_varythickness_1percent'; alim = [-np.inf, np.inf]   # 0.8% = std/mean GTES of bolo 7
+# fn_comments = '_alphaninfpinf_varythickness_5percent'; alim = [-np.inf, np.inf]   # 0.8% = std/mean GTES of bolo 7
+# fn_comments = '_alphaninfpinf_varythickness_0p001percent'; alim = [-np.inf, np.inf]   # 0.8% = std/mean GTES of bolo 7
+fn_comments = '_alphaninfpinf_IstackI1d_350nm'; alim = [-np.inf, np.inf]   # 0.8% = std/mean GTES of bolo 7
+
+# if constrained:
+#     fn_comments = fn_comments_a01; alim = alim_a01
+# else:
+#     fn_comments = fn_comments_a0inf; alim = alim_a0inf
+# fn_comments = fn_comments_a0inf; alim = alim_a0inf
+
 plot_comments = ''
-vmax = 2E3   # quality plot color bar scaling
-calc = 'mean'   # how to evaluate fit parameters from simluation data
+vmax = 1E4   # quality plot color bar scaling
+# sigmaG_frac = 0.024   # sigma_G = x fraction of G
+calc = 'median'   # how to evaluate fit parameters from simluation data
+qplim = [-2,2]
 bolo1b = True   # add bolo1 data to legacy prediction comparison plot
 
+vary_thickness = False   # vary film thicknesses during simulation
+derr = 0.00   # error on layer thicknesses [fraction of layer d]
 
 # initial guess for fitter
-# p0_a0inf = np.array([0.74, 0.59, 1.29, 0.47, 1.94, 1.26]); sigmap0_a0inf = np.array([0.09, 0.19, 0.06, 0.58, 2.45, 0.11])   # U, W, I [pW/K], alpha_U, alpha_W, alpha_I [unitless]; fit vals from alpha=[0,2] model
-p0_a0inf_median = np.array([0.73, 0.61, 1.28, 0.20, 1.2, 1.25]);# sigmap0_a0inf_median = np.array([0.09, 0.19, 0.06, 0.58, 2.45, 0.11])   # U, W, I [pW/K], alpha_U, alpha_W, alpha_I [unitless]; fit vals from alpha=[0,2] model
-p0_a01 = np.array([0.8, 0.42, 1.33, 1., 1., 1.]); #sigmap0_a01 = np.array([0.03, 0.06, 0.03, 0.02, 0.03, 0.00])   #  fit vals from alpha=[0,1] model, 1E5 iterations
-p0 = p0_a0inf_median;# sigma_p0 = sigmap0_a0inf_median
+p0_a0inf = np.array([0.7, 0.75, 1.2, 0.75, 0.1, 1.5])   # U, W, I [pW/K], alpha_U, alpha_W, alpha_I [unitless]
+p0_a01 = np.array([0.5, 0.5, 1, 1., 1., 1.])   # U, W, I [pW/K], alpha_U, alpha_W, alpha_I [unitless]
+p0 = p0_a0inf
 
 # choose GTES data 
 # ydata_fitGexplicit = [13.95595194, 5.235218152, 8.182147122, 10.11727864, 17.47817158, 5.653424631, 15.94469664, 3.655108238]   # pW/K at 170 mK fitting for G explicitly, weighted average on most bolos (*) (second vals have extra bling); bolo 1b, 24*, 23*, 22, 21*, 20, 7*, 13* 
 # sigma_fitGexplicit = [0.073477411, 0.01773206, 0.021512022, 0.04186006, 0.067666665, 0.014601341, 0.083450365, 0.013604177]   # fitting for G explicitly produces very small error bars
-ydata_fitGexplicit_nobling = [13.95595194, 4.721712381, 7.89712938, 10.11727864, 17.22593561, 5.657104443, 15.94469664, 3.513915367]   # pW/K at 170 mK fitting for G explicitly, weighted average only on 7; bolo 1b, 24, 23, 22, 21, 20, 7*, 13 
+ydata_fitGexplicit_nobling = np.array([13.95595194, 4.721712381, 7.89712938, 10.11727864, 17.22593561, 5.657104443, 15.94469664, 3.513915367])   # pW/K at 170 mK fitting for G explicitly, weighted average only on 7; bolo 1b, 24, 23, 22, 21, 20, 7*, 13 
 sigma_fitGexplicit_nobling = [0.073477411, 0.034530085, 0.036798694, 0.04186006, 0.09953389, 0.015188074, 0.083450365, 0.01762426]
+# sigma_percentG = sigmaG_frac*ydata_fitGexplicit_nobling
 ydata = np.array(ydata_fitGexplicit_nobling); sigma = np.array(sigma_fitGexplicit_nobling)
 
 bolos = np.array(['bolo 1b', 'bolo 24', 'bolo 23', 'bolo 22', 'bolo 21', 'bolo 20', 'bolo 7', 'bolo 13'])
@@ -72,6 +111,13 @@ plot_dir = analysis_dir + 'plots/layer_extraction_analysis/'
 sim_file = analysis_dir + 'Analysis_Files/sim' + fn_comments + '.pkl'
 csv_file = analysis_dir + 'Analysis_Files/sim' + fn_comments + '.csv'
 data = [ydata, sigma] 
+
+# bolos 1a-f vary leg length, all four legs have full microstrip
+ydatavl_lb = np.array([22.17908389, 13.95595194, 10.21776418, 8.611287109, 7.207435165, np.nan]); sigmavl_lb = np.array([0.229136979, 0.073477411, 0.044379343, 0.027206631, 0.024171663, np.nan])   # pW/K, bolos with minimal bling
+ydatavl_mb = np.array([22.19872947, np.nan, 10.64604145, 8.316849305, 7.560603448, 6.896700236]); sigmavl_mb = np.array([0.210591249, np.nan, 0.065518258, 0.060347632, 0.051737016, 0.039851469])   # pW/K, bolos with extra bling
+ll_vl = np.array([120., 220., 320., 420., 520., 620.])*1E-3   # mm
+llvl_all = np.append(ll_vl, ll_vl); ydatavl_all = np.append(ydatavl_lb, ydatavl_mb); sigmavl_all = np.append(sigmavl_lb, sigmavl_mb)
+vlength_data = np.stack([ydatavl_all, sigmavl_all, llvl_all*1E3])
 
 if latex_fonts:   # fonts for paper plots
     plt.rc('text', usetex=True)
@@ -84,7 +130,8 @@ if latex_fonts:   # fonts for paper plots
 
 ### Execute Analysis
 if run_sim:   # run simulation with just hand-written function
-    sim_results = runsim_chisq(n_its, p0, data, bounds, plot_dir, show_yplots=show_plots, save_figs=save_figs, save_sim=save_sim, sim_file=sim_file, fn_comments=fn_comments)  
+    # sim_results = runsim_chisq(n_its, p0, data, bounds, plot_dir, show_yplots=show_plots, save_figs=save_figs, save_sim=save_sim, sim_file=sim_file, fn_comments=fn_comments)  
+    sim_results = runsim_chisq(n_its, p0, data, bounds, plot_dir, show_yplots=show_plots, save_figs=save_figs, save_sim=save_sim, sim_file=sim_file, fn_comments=fn_comments, vary_thickness=vary_thickness, derr=derr)  
 
 
 if quality_plots:   # plot G_x vs alpha_x parameter space with various fit results
@@ -94,41 +141,34 @@ if quality_plots:   # plot G_x vs alpha_x parameter space with various fit resul
     sim_dataT = sim_dict['sim']; sim_data = sim_dataT.T   # simulation parameter values
     param_labels = ['G$_U$', 'G$_W$', 'G$_I$', '$\\alpha_U$', '$\\alpha_W$', '$\\alpha_I$']
 
-    if np.isinf(alim[1]):   # quality plot title
-        qp_title = '$\\boldsymbol{\\mathbf{\\alpha \\in [0,\infty)}}$'   # title for 1x3 quality plots
-    else:
-        qp_title = '$\\boldsymbol{\\mathbf{\\alpha \in [0,'+str(alim[1])+']}}$'   # title for 1x3 quality plots
+    # if np.isinf(alim[1]):   # quality plot title
+    #     qp_title = '$\\boldsymbol{\\mathbf{\\alpha \\in ['+str(alim[0])+',\infty)}}$'   # title for 1x3 quality plots
+    # else:
+    #     # qp_title = '$\\boldsymbol{\\mathbf{\\alpha \in [0,'+str(alim[1])+']}}$'   # title for 1x3 quality plots
+    #     qp_title = '$\\boldsymbol{\\mathbf{\\alpha \in ['+str(alim[0])+','+str(alim[1])+']}}$'   # title for 1x3 quality plots
+    qp_title = '$\\boldsymbol{\\mathbf{\\alpha \in ['+str(alim[0])+','+str(alim[1])+']}}$'   
 
     ### plot fit in 2D parameter space, take mean values of simulation
-    results_mean = qualityplots(data, sim_dict, plot_dir=plot_dir, save_figs=save_figs, fn_comments=fn_comments+'_mean', title=qp_title+'\\textbf{ (Mean)}', vmax=vmax, calc='mean')
+    results_mean = qualityplots(data, sim_dict, plot_dir=plot_dir, save_figs=save_figs, fn_comments=fn_comments+'_mean', title=qp_title+'\\textbf{ (Mean)}', vmax=vmax, calc='mean', qplim=qplim)
     params_mean, paramerrs_mean, kappas_mean, kappaerrs_mean, Gwire_mean, sigmaGwire_mean, chisq_mean = results_mean
 
     ### plot fit in 2D parameter space, take median values of simulation
-    results_med = qualityplots(data, sim_dict, plot_dir=plot_dir, save_figs=save_figs, fn_comments=fn_comments+'_median', title=qp_title+'\\textbf{ (Median)}', vmax=vmax, calc='median')
+    results_med = qualityplots(data, sim_dict, plot_dir=plot_dir, save_figs=save_figs, fn_comments=fn_comments+'_median', title=qp_title+'\\textbf{ (Median)}', vmax=vmax, calc='median', qplim=qplim)
     params_med, paramerrs_med, kappas_med, kappaerrs_med, Gwire_med, sigmaGwire_med, chisq_med = results_med
 
     ### pairwise correlation plots
     pairfig = pairwise(sim_data, param_labels, title=qp_title, save_figs=save_figs, plot_dir=plot_dir, fn_comments=fn_comments)
 
-    ### analyze sub-populations of solutions 
-    # zeroaW = np.where((sim_data[4] == 0))[0]
-    # pairfig = pairwise(sim_data, param_labels, title=qp_title+'\\textbf{ - alphaW=0 solns}', save_figs=save_figs, plot_dir=plot_dir, fn_comments=fn_comments, indsop=zeroaW, oplotlabel='$\\alpha_W$=0')
-
-    # aWlim = 1E-5; aUlim = 0.7   # limits to delineate two solution spaces
-    # lowa = np.where((sim_data[4] < aWlim) & (sim_data[3] < aUlim))[0]
-    # pairfig = pairwise(sim_data, param_labels, title=qp_title+'\\textbf{ - $\\boldsymbol{\\mathbf{\\alpha_W<}}$ '+str(aWlim)+' and $\\boldsymbol{\\mathbf{\\alpha_U<}}$ '+str(aUlim)+' Solutions}', save_figs=save_figs, plot_dir=plot_dir, fn_comments=fn_comments+'_overplotlowa', indsop=lowa, oplotlabel='low $\\alpha$')
-    # pairfig = pairwise(sim_data, param_labels, title=qp_title+'\\textbf{ - $\\boldsymbol{\\mathbf{\\alpha_W<}}$ '+str(aWlim)+' and $\\boldsymbol{\\mathbf{\\alpha_U<}}$ '+str(aUlim)+' Solutions}', save_figs=save_figs, plot_dir=plot_dir, fn_comments=fn_comments+'_lowa', indstp=lowa)
-
-    # higha = np.where((sim_data[4] > aWlim) | (sim_data[3] > aUlim))[0]   # hopefully this removes bimodal solutions
-    # pairfig = pairwise(sim_data, param_labels, title=qp_title+'\\textbf{ - $\\boldsymbol{\\mathbf{\\alpha_W>}}$ '+str(aWlim)+' or $\\boldsymbol{\\mathbf{\\alpha_U>}}$ '+str(aUlim)+' Solutions}', save_figs=save_figs, plot_dir=plot_dir, fn_comments=fn_comments+'_overplothigha', indsop=higha, oplotlabel='high $\\alpha$')
-    # pairfig = pairwise(sim_data, param_labels, title=qp_title+'\\textbf{ - $\\boldsymbol{\\mathbf{\\alpha_W>}}$ '+str(aWlim)+' or $\\boldsymbol{\\mathbf{\\alpha_U>}}$ '+str(aUlim)+' Solutions}', save_figs=save_figs, plot_dir=plot_dir, fn_comments=fn_comments+'_higha', indstp=higha)
-
-    # print('\n\nAnalyzing only HIGH aW and aU solutions:')
-    # results_higha = qualityplots(data, sim_dict, plot_dir=plot_dir, save_figs=save_figs, fn_comments=fn_comments+'_higha', title=qp_title+'\\textbf{, high aW and aU (Mean)}', vmax=vmax, calc='mean', spinds=higha)
-
-    # print('\n\nAnalyzing only LOW aW and aU solutions:')
-    # results_lowa = qualityplots(data, sim_dict, plot_dir=plot_dir, save_figs=save_figs, fn_comments=fn_comments+'_lowa', title=qp_title+'\\textbf{ low aW and aU (Mean)}', vmax=vmax, calc='mean', spinds=lowa)
-
+    # ## compare with unconstrained
+    # sim_file_a01 = analysis_dir + 'Analysis_Files/sim' + fn_comments_a01 + '.pkl'
+    # with open(sim_file_a01, 'rb') as infile:   # load simulation pkl
+    #     sim_dict = pkl.load(infile)
+    # alim = alim_a01
+    # if np.isinf(alim[1]):   # quality plot title
+    #     qp_title = '$\\boldsymbol{\\mathbf{\\alpha \\in [0,\infty)}}$'   # title for 1x3 quality plots
+    # else:
+    #     qp_title = '$\\boldsymbol{\\mathbf{\\alpha \in [0,'+str(alim[1])+']}}$'   # title for 1x3 quality plots
+    # results_01 = qualityplots(data, sim_dict, plot_dir=plot_dir, save_figs=save_figs, fn_comments=fn_comments+'_mean', title=qp_title+'\\textbf{ (Mean)}', vmax=vmax, calc='mean')
 
     if save_csv:   # save model results to CSV file
         vals_mean = np.array([params_mean[0], params_mean[1], params_mean[2], params_mean[3], params_mean[4], params_mean[5], kappas_mean[0], kappas_mean[1], kappas_mean[2], Gwire_mean, chisq_mean])
@@ -143,13 +183,6 @@ if quality_plots:   # plot G_x vs alpha_x parameter space with various fit resul
             csvwriter = csv.writer(csvfile)  # csv writer object  
             csvwriter.writerow(fields)  
             csvwriter.writerows(rows)
-
-
-if average_qp:   # check for scattering in full MC simulation vs single run
-
-    funcgrid_U, funcgridmean_U = plot_meanqp(p0, data, n_its, 'U', plot_dir, savefigs=save_figs, fn_comments=fn_comments)
-    funcgrid_W, funcgridmean_W = plot_meanqp(p0, data, n_its, 'W', plot_dir, savefigs=save_figs, fn_comments=fn_comments)
-    funcgrid_I, funcgridmean_I = plot_meanqp(p0, data, n_its, 'I', plot_dir, savefigs=save_figs, fn_comments=fn_comments)
 
 
 if lit_compare:
@@ -271,14 +304,43 @@ if lit_compare:
     mfpI_Wyb = l_bl(7, .400)   # um; boundary diffusive reflection limited phonon mfp (specular scattering will increase this)
     mfpU_Wyb = l_bl(7, .420)   # um; boundary diffusive reflection limited phonon mfp (specular scattering will increase this)
 
-    f = 1   # fraction of diffuse reflections; 1 = Casimir limit
+    # how does l_B vary with d?
+    dtest = np.linspace(0.1,1)   # um
+    wtest = 5;   # um
+    lb_test = l_bl(wtest, dtest)
+    p0=[2,1,.2]
+    dparams, cv = curve_fit(monopower, dtest, lb_test, p0)
+    plt.figure()
+    plt.plot(dtest, lb_test, label='values')
+    plt.plot(dtest, monopower(dtest, dparams[0], dparams[1], dparams[2]), label='power law fit', alpha=0.5)
+    plt.xlabel('d [um]')
+    plt.ylabel('l_B [um]')
+    plt.legend()
+
+    # how does l_B vary with w?
+    dtest = 0.40   # um
+    wtest = np.linspace(1,10);   # um
+    p0=[1,0.5,0]
+    lb_test = l_bl(wtest, dtest)
+    wparams, cv = curve_fit(monopower, wtest, lb_test, p0)
+    plt.figure()
+    plt.plot(wtest, lb_test, label='values')
+    plt.plot(wtest, monopower(wtest, wparams[0], wparams[1], wparams[2]), label='power law fit', alpha=0.5)
+    plt.figure()
+    plt.plot(wtest, lb_test)
+    plt.xlabel('w [um]')
+    plt.ylabel('l_B [um]')
+    plt.xscale('log')
+    plt.legend()
+
+
     mfpI_eff = l_eff(7, .4, f)   # um; reflection limited phonon mfp including spectral scattering (if f<1)
     gamma = mfpI_eff/mfpI_Wyb   # should be 1 if f=1 (Casimir limit)
 
     # reproduce Wyborne84 Fig 1
     dtest = np.ones(50); wtest = np.linspace(1,50)
     plt.figure(); plt.plot(wtest/dtest, (1-l_bl(wtest, dtest)/l_Casimir(wtest, dtest))*100)
-    plt.xlabel('n')
+    plt.xlabel('n'); plt.ylabel('1-l_b/l_C [%]')
 
     # reproduce Wyborne84 Fig 2
     ftest = np.linspace(0,1)
@@ -379,12 +441,14 @@ if compare_legacy:   # compare G predictions with NIST legacy data
     simresults_mean = np.array([np.mean(sim_dict['sim'], axis=0), np.std(sim_dict['sim'], axis=0)])
     simresults_med = np.array([np.median(sim_dict['sim'], axis=0), np.std(sim_dict['sim'], axis=0)])
 
-    if np.isinf(alim[1]):
-        plot_comments = '_unconstrained'
-        title='Predictions from Model, $\\alpha \\in [0,\\infty)$'
-    else:
-        plot_comments = '_constrained'
-        title='Predictions from Model, $\\alpha \\in [0,1]$'
+    # if np.isinf(alim[1]):
+    #     plot_comments = '_unconstrained'
+    #     title='$\\alpha \\in [0,\\infty)$ Model Predictions'
+    # else:
+    #     plot_comments = '_constrained'
+    #     title='$\\alpha \\in [0,1]$ Model Predictions'
+    title = '$\\boldsymbol{\\mathbf{\\alpha \in ['+str(alim[0])+','+str(alim[1])+']}}$ Model Predictions'   
+
     sim_dataT = sim_dict['sim']; sim_data = sim_dataT.T
 
     L = 220   # bolotest leg length, um
@@ -394,8 +458,11 @@ if compare_legacy:   # compare G predictions with NIST legacy data
     AoL_bolo = A_bolo/L   # A/L for bolotest devices
     data1b=np.array([ydata[0], sigma[0]]) if bolo1b else []  # plot bolo1b data?
 
-    predict_Glegacy(simresults_mean, data1b=data1b, save_figs=save_figs, title=title+' (Mean)', plot_comments=plot_comments+'_mean', fs=(7,7))
-    predict_Glegacy(simresults_med, data1b=data1b, save_figs=save_figs, title=title+' (Median)', plot_comments=plot_comments+'_median')
+    predict_Glegacy(simresults_mean, data1b=data1b, save_figs=save_figs, title=title+' (Mean)', plot_comments=fn_comments+'_mean', fs=(7,7))
+    predict_Glegacy(simresults_mean, data1b=data1b, save_figs=save_figs, title=title+' (Mean), $\\beta$=0.8', plot_comments=fn_comments+'_mean_beta0p8', fs=(7,7), Lscale=0.8)
+    # predict_Glegacy(simresults_mean, save_figs=save_figs, plot_comments=plot_comments+'_forpaper', fs=(6.5,5))
+    predict_Glegacy(simresults_med, data1b=data1b, save_figs=save_figs, title=title+' (Median)', plot_comments=fn_comments+'_median')
+    predict_Glegacy(simresults_med, data1b=data1b, save_figs=save_figs, title=title+' (Median), $\\beta$=0.8', plot_comments=fn_comments+'_median_beta0p8', Lscale=0.8)
     # (G_layer(simresults_mean, dI1, layer='I') + G_layer(simresults_mean, dI2, layer='I')) *lw/7 *220/ll   # not sure what this was for?
 
     # title="Predictions from Layer $\kappa$'s"
@@ -406,105 +473,33 @@ if compare_legacy:   # compare G predictions with NIST legacy data
 if design_implications:   # making plots to illustrate TES and NIS design implications of this work
 
     ### plot G_TES and TFN as a function of substrate width
-    # fit_params = p0_a0inf_median; sig_params = sigmap0_a0inf_median
-    # fit = np.array([p0_a0inf_median, sigmap0_a0inf_median])
+    ### assumes two legs with full microstrip and two are 
     with open(sim_file, 'rb') as infile:   # load simulation pkl
         sim_dict = pkl.load(infile)
     simresults_mean = np.array([np.mean(sim_dict['sim'], axis=0), np.std(sim_dict['sim'], axis=0)])
     simresults_med = np.array([np.median(sim_dict['sim'], axis=0), np.std(sim_dict['sim'], axis=0)])
     sim_results = simresults_mean if calc=='mean' else simresults_med
 
-    lwidths = np.linspace(0.1, 100/7, num=100)   # um
-    # llength = 220*np.ones_like(lwidths)   # um
-    # dsub = .420*np.ones_like(lwidths)   # um    
-    llength = 220   # um
-    dsub = .420   # um
-    Tbath = 0.170   # K
-    def A_1b(lw, layer='wiring'):   # area of bolotest bolo with microstrip on four legs, i.e. bolo 1b
-        if layer=='wiring':
-            dsub = .420; dW1 = .160; dI1 = .350; dW2 = .340; dI2 = .400   # film thicknesses, um
-        elif layer=='W1':
-            dsub = .420; dW1 = .200; dI1 = 0; dW2 = 0; dI2 = 0   # film thicknesses, um
-        elif layer=='bare':
-            dsub = .340; dW1 = 0; dI1 = 0; dW2 = 0; dI2 = 0   # film thicknesses, um
-        w1w, w2w = wlw(lw, fab='bolotest', layer=layer)
-        return (lw*dsub + w1w*dW1 + w2w*dW2 + lw*dI1 +lw*dI2)*4   # area of four legs with microstrip, i.e. bolo 1b
+    lwidths = np.linspace(2.75, 100/7, num=100)   # um
+    # Glims = [1.9,34]
+    # NEPlims = [2.1,7]
+    Glims = [1.6,30]
+    NEPlims = [2.1,9]
+
+    # plot_GandTFNEP(sim_results, lwidths, save_fig=save_figs, plot_dir=plot_dir, plot_NEPerr=True, plot_Gerr=True, Glims=Glims, NEPlims=NEPlims, plotG=False)
+    plot_GandTFNEP(sim_results, lwidths, save_fig=save_figs, plot_dir=plot_dir, plot_NEPerr=True, plot_Gerr=True, Glims=Glims, plotG=False)
     
-    A_full = A_1b(lwidths, layer='wiring'); A_W1 = A_1b(lwidths, layer='W1'); A_bare = A_1b(lwidths, layer='bare')   # areas of different film stacks
-
-    G_full, Gerr_full = Gfrommodel(sim_results, dsub, lwidths, llength, layer='total', fab='bolotest')
-    G_U, Gerr_U = Gfrommodel(sim_results, dsub, lwidths, llength, layer='U', fab='bolotest')
-    G_W1, Gerr_W1 = Gfrommodel(sim_results, dsub, lwidths, llength, layer='W1', fab='bolotest')
-    G_Nb200 = G_U+G_W1; Gerr_Nb200 = Gerr_U+Gerr_W1
-    G_bare, Gerr_bare = Gfrommodel(sim_results, .340, lwidths, llength, layer='U', fab='bolotest')   # bare substrate is thinner from etching steps
-
-    NEP_full = TFNEP(Tbath, G_full*1E-12)*1E18; NEPerr_full = TFNEP(Tbath, Gerr_full*1E-12)*1E18   # aW / rtHz; Kenyan 2006 measured 1E-17 for a TES with comparable G at 170 mK
-    NEP_W1 = TFNEP(Tbath, G_Nb200*1E-12)*1E18; NEPerr_W1 = TFNEP(Tbath, Gerr_Nb200*1E-12)*1E18   # aW / rtHz; Kenyan 2006 measured 1E-17 for a TES with comparable G at 170 mK
-    NEP_bare = TFNEP(Tbath, G_bare*1E-12)*1E18; NEPerr_bare = TFNEP(Tbath, Gerr_bare*1E-12)*1E18   # aW / rtHz; Kenyan 2006 measured 1E-17 for a TES with comparable G at 170 mK
-    Glims = np.array([0, 1.1*np.nanmax([G_full, G_W1, G_bare])])
-    NEPlims = TFNEP(Tbath, Glims*1E-12)*1E18
-    
-    # predicted G and NEP vs substrate width
-    fig, ax1 = plt.subplots() 
-    ax1.plot(lwidths, G_full, color='rebeccapurple', label='G$_\\text{TES}$, Microstrip', alpha=0.8) 
-    plt.fill_between(lwidths, G_full-Gerr_full, G_full+Gerr_full, facecolor="mediumpurple", alpha=0.2)   # error
-    ax1.plot(lwidths, G_Nb200, color='green', label='G$_\\text{TES}$, 200nm Nb', alpha=0.8) 
-    plt.fill_between(lwidths, G_Nb200-Gerr_Nb200, G_Nb200+Gerr_Nb200, facecolor="limegreen", alpha=0.2)   # error
-    ax1.plot(lwidths, G_bare, color='royalblue', label='G$_\\text{TES}$, Bare', alpha=0.8)
-    plt.fill_between(lwidths, G_bare-Gerr_bare, G_bare+Gerr_bare, facecolor="cornflowerblue", alpha=0.2)   # error
-    ax1.set_xlabel('Substrate Width [$\mu$m]') 
-    ax1.set_ylabel('G$_\\text{TES}$ [pW/K]') 
-    ax1.set_ylim(ymin=Glims[0], ymax=Glims[1]) 
-    ax2 = ax1.twinx() 
-    ax2.plot(lwidths, NEP_full, '--', color='rebeccapurple', label='NEP')   # this varies as G^1/2
-    ax2.plot(lwidths, NEP_W1, '--', color='green', label='NEP')   # this varies as G^1/2
-    ax2.plot(lwidths, NEP_bare, '--', color='royalblue', label='NEP')   # this varies as G^1/2
-    ax2.set_ylim(ymin=NEPlims[0], ymax=NEPlims[1]) 
-    ax2.set_ylabel('Thermal Fluctuation NEP [aW/$\sqrt{Hz}$]')     
-    ax2.set_xlim(0, np.max(lwidths))
-
-    h1, l1 = ax1.get_legend_handles_labels()
-    h2, l2 = ax2.get_legend_handles_labels()
-    ax1.legend(h1+h2, l1+l2, loc='upper left', fontsize='12', ncol=2)
-    if save_figs: plt.savefig(plot_dir + 'design_implications_v2.png', dpi=300) 
-   
-    # predicted G and NEP vs leg A/L
-    fig, ax1 = plt.subplots() 
-    ax1.plot(A_full/llength, G_full, color='rebeccapurple', label='G$_\\text{TES}$, Microstrip', alpha=0.8) 
-    plt.fill_between(A_full/llength, G_full-Gerr_full, G_full+Gerr_full, facecolor="mediumpurple", alpha=0.2)   # error
-    ax1.plot(A_W1/llength, G_Nb200, color='green', label='G$_\\text{TES}$, 200nm Nb', alpha=0.8) 
-    plt.fill_between(A_W1/llength, G_Nb200-Gerr_Nb200, G_Nb200+Gerr_Nb200, facecolor="limegreen", alpha=0.2)   # error
-    ax1.plot(A_bare/llength, G_bare, color='royalblue', label='G$_\\text{TES}$, Bare', alpha=0.8)
-    plt.fill_between(A_bare/llength, G_bare-Gerr_bare, G_bare+Gerr_bare, facecolor="cornflowerblue", alpha=0.2)   # error
-    ax1.set_xlabel('TES Leg A/L [$\mu$m]') 
-    ax1.set_ylabel('G$_\\text{TES}$ [pW/K]') 
-    ax1.set_ylim(ymin=Glims[0], ymax=Glims[1]) 
-    ax2 = ax1.twinx() 
-    ax2.plot(A_full/llength, NEP_full, '--', color='rebeccapurple', label='NEP')   # this varies as G^1/2
-    ax2.plot(A_W1/llength, NEP_W1, '--', color='green', label='NEP')   # this varies as G^1/2
-    ax2.plot(A_bare/llength, NEP_bare, '--', color='royalblue', label='NEP')   # this varies as G^1/2
-    ax2.set_ylim(ymin=NEPlims[0], ymax=NEPlims[1]) 
-    ax2.set_ylabel('Thermal Fluctuation NEP [aW/$\sqrt{Hz}$]')     
-    ax2.set_xlim(0, np.nanmax(A_full/llength))
-
-    h1, l1 = ax1.get_legend_handles_labels()
-    h2, l2 = ax2.get_legend_handles_labels()
-    ax1.legend(h1+h2, l1+l2, loc='upper left', fontsize='12', ncol=2)
-    if save_figs: plt.savefig(plot_dir + 'design_implications_AL.png', dpi=300) 
-
-    # looking for crossover dsub value where G_micro = G_sub 
+    ### find crossover dsub value where G_micro = G_sub 
     # this will be constant with legnth but not constant with width since w_W1/W2 are constant
     # at lw=10 um, the crossover thickness is 1.17  um
     # at lw=7 um, the crossover thickness is 1.14  um
     # at lw=5 um, the crossover thickness is 1.21  um
     # at lw=41.5 um, the crossover thickness is 1.02  um
 
-    lw_test = 20; ll_test = 20   # um; um
+    lw_test = 7; ll_test = 220   # um; um
     fab='legacy'
     # dsubs = np.linspace(0, 2, int(1E4))  # um
-    # G_micros = Gfrommodel(p0, dsubs, lw_test, ll_test, layer='wiring', fab='bolotest')
-    # G_Us = Gfrommodel(p0, dsubs, lw_test, ll_test, layer='U', fab='bolotest')
-    # Gratio = G_Us/G_micros
+
     def xover_finder(dsub, fit, lw, ll, fab=fab):   # when G_U/G_micro = 1, returns 0
         G_micros = Gfrommodel(fit, dsub, lw, ll, layer='wiring', fab=fab)[0]
         G_Us = Gfrommodel(fit, dsub, lw, ll, layer='U', fab=fab)[0]
@@ -512,10 +507,9 @@ if design_implications:   # making plots to illustrate TES and NIS design implic
 
     # ll_test = 1   # um, shouldn't matter since ratio is length independent
     # lwidths = np.arange(0, 50, 10)
-    # xover_dsub = fsolve(xover_finder, 1, args=(np.stack(([p0]*len(lwidths)),axis=0), lwidths, np.ones_like(lwidths)*ll_test))[0]   # um
-    # xover_dsub = fsolve(xover_finder, 1, args=(np.stack(([p0]*len(lwidths)),axis=0)[0], lwidths[0], (np.ones_like(lwidths)*ll_test)[0]))[0]   # um
-    # fsolve(xover_finder, 1, args=(np.stack(([p0]*len(lwidths)),axis=0), lwidths, (np.ones_like(lwidths)*ll_test)))[0]
+
     xover_dsub = fsolve(xover_finder, ll_test, args=(sim_results, lw_test, ll_test))[0]
+    print('Substrate thickness above which G_substrate >= G_microstrip = '+str(round(xover_dsub, 1))+' um for leg width of '+str(lw_test)+' um and leg length of '+str(ll_test)+' um.')
 
 
 if load_and_plot:   # for loading a simulation and replotting things; kinda scrap
@@ -554,75 +548,6 @@ if load_and_plot:   # for loading a simulation and replotting things; kinda scra
     chisq_fit = chisq_val(sim_results[0], data)
     print('chisq value for the fit: ', round(chisq_fit, 3)) 
 
-    # chisq_fit = calc_chisq(ydata, Gbolos(sim_results[0]))
-    # print('Chi-squared value for the fit: ', round(chisq_fit, 3))
-    
-    # parameters = np.array(['G_U', 'G_W', 'G_I', 'alpha_U', 'alpha_W', 'alpha_I'])
-    # # look at histogram of fit values for each parameter
-    # for cc, col in enumerate(sim_data.T):
-    #     plt.figure()
-    #     plt.hist(col, bins=20)
-    #     plt.title(parameters[cc]+' Values for alpha=[0,inf)')
-    #     plt.yscale('log')
-        
-    # plt.figure()
-    # plt.hist(Gwires, bins=20)
-    # plt.title('G_wire Values for alpha=[0,inf)')
-    # plt.yscale('log')
-
-if scrap:
-
-    # estimate d dependence in l_eff for purely diffusive limit
-    def monoExp(x, m, t, b):
-        return m * np.exp(t * x) + b
-    def expdecay(x, m, t, b):
-        return m * np.exp(-t * x) + b
-    def plaw(x, a, b, c):
-        return a*x**b + c
-
-    ntest = np.linspace(1,30)   # range of n we care about, bolotest n=17.5
-    Iterms = ntest**3*I_mfp(1/ntest)+I_mfp(ntest)
-
-    # polynomial fits
-    pparams3 = np.polyfit(ntest, Iterms, 3)
-    pparams2 = np.polyfit(ntest, Iterms, 2)
-    pparams1 = np.polyfit(ntest, Iterms, 1)
-
-    # power law fit
-    yp1 = np.log(Iterms); xp1 = np.log(ntest)   # transform data
-    tparams1 = np.polyfit(xp1, yp1, 1)
-    
-    # exponential fit
-    yp2 = np.log(Iterms); xp2 = ntest   # transform data
-    tparams2 = np.polyfit(xp2, yp2, 1)
-
-    # power law with offset
-    from scipy.optimize import curve_fit
-    p0test = (0.9, 1.3, -0.5) 
-    ploparams, cv = curve_fit(plaw, ntest, Iterms, p0test)
-
-    # resdiuals 
-    plt.figure()
-    plt.plot(ntest, (pparams3[0]*ntest**3 + pparams3[1]*ntest**2 + pparams3[2]*ntest + pparams3[3]-Iterms)/Iterms*100, '.', label='3 deg polynomial')
-    plt.plot(ntest, (pparams2[0]*ntest**2 + pparams2[1]*ntest + pparams2[2]-Iterms)/Iterms*100, '.', label='2 deg polynomial')
-    # plt.plot(ntest, (pparams1[0]*ntest + pparams1[1]-Iterms)/Iterms*100, '.', label='1 deg polynomial')   # this fit is the worst of the power law fits
-    plt.plot(ntest, (np.exp(tparams1[1])*ntest**tparams1[0]-Iterms)/Iterms*100, '.', label=str(round(np.exp(tparams1[1]),2)) + 'n^'+str(round(tparams1[0], 2)))
-    plt.plot(ntest, (plaw(ntest, ploparams[0], ploparams[1], ploparams[2])-Iterms)/Iterms*100, '.', label=str(round(ploparams[0],2)) + 'n^' + str(round(ploparams[1], 2))+str(round(ploparams[2], 2)))
-    # plt.plot(ntest, (np.exp(tparams2[1]*ntest*tparams2[0])-Iterms)/Iterms*100, '.', label='exponential fit, beta='+str(round(tparams1[0], 2)))   # exponential fit is the most worst of them all
-    plt.xlabel('n')
-    plt.ylabel('Residuals [%]')
-    plt.legend()
-    plt.ylim(-4,4)
-    plt.xlim(1,30)
-    plt.vlines(17.5, -4, 4, color='k')
-    plt.hlines(0, 1, 30, linestyles='--', color='k')
-    plt.title('n$^3$I(1/n) + I(n)')
-
-    from lmfit import Model
-    fmodel = Model(Gbolos)
-    result = fmodel.fit(y, x=x, a=14, b=3.9, mo=0.8, q=0.002)
-    sim_result = minimize(chisq_val, p0, args=[ydata, sigma], bounds=bounds)
-    curve_fit(self.powerlaw_fit_func, temperatures, powerAtRns[index], p0=init_guess, sigma=sigma[index], absolute_sigma=True) 
 
 if bimodal_solns:
 
@@ -636,57 +561,63 @@ if bimodal_solns:
     else:
         qp_title = '$\\boldsymbol{\\mathbf{\\alpha \in [0,'+str(alim[1])+']}}$'   # title for 1x3 quality plots
 
+    data1b=np.array([ydata[0], sigma[0]]) if bolo1b else []  # plot bolo1b data?
+
     ### pairwise correlation plots
     pairfig = pairwise(sim_data, param_labels, title=qp_title, save_figs=save_figs, plot_dir=plot_dir, fn_comments=fn_comments)
 
-    # ### analyze sub-populations of solutions 
-    aWlim = 1E-5; aUlim = 0.7   # limits to delineate two solution spaces
-    lowa = np.where((sim_data[4] < aWlim) & (sim_data[3] < aUlim))[0]
-    # pairfig = pairwise(sim_data, param_labels, title=qp_title+'\\textbf{ - $\\boldsymbol{\\mathbf{\\alpha_W<}}$ '+str(aWlim)+' and $\\boldsymbol{\\mathbf{\\alpha_U<}}$ '+str(aUlim)+' Solutions}', save_figs=save_figs, plot_dir=plot_dir, fn_comments=fn_comments+'_overplotlowa', indsop=lowa, oplotlabel='low $\\alpha$')
-    # pairfig = pairwise(sim_data, param_labels, title=qp_title+'\\textbf{ - $\\boldsymbol{\\mathbf{\\alpha_W<}}$ '+str(aWlim)+' and $\\boldsymbol{\\mathbf{\\alpha_U<}}$ '+str(aUlim)+' Solutions}', save_figs=save_figs, plot_dir=plot_dir, fn_comments=fn_comments+'_lowa', indstp=lowa)
+    # # ### analyze sub-populations of solutions 
+    # aWlim = 1E-5; aUlim = 0.7   # limits to delineate two solution spaces
+    # lowa = np.where((sim_data[4] < aWlim) & (sim_data[3] < aUlim))[0]
+    # # pairfig = pairwise(sim_data, param_labels, title=qp_title+'\\textbf{ - $\\boldsymbol{\\mathbf{\\alpha_W<}}$ '+str(aWlim)+' and $\\boldsymbol{\\mathbf{\\alpha_U<}}$ '+str(aUlim)+' Solutions}', save_figs=save_figs, plot_dir=plot_dir, fn_comments=fn_comments+'_overplotlowa', indsop=lowa, oplotlabel='low $\\alpha$')
+    # # pairfig = pairwise(sim_data, param_labels, title=qp_title+'\\textbf{ - $\\boldsymbol{\\mathbf{\\alpha_W<}}$ '+str(aWlim)+' and $\\boldsymbol{\\mathbf{\\alpha_U<}}$ '+str(aUlim)+' Solutions}', save_figs=save_figs, plot_dir=plot_dir, fn_comments=fn_comments+'_lowa', indstp=lowa)
 
-    higha = np.where((sim_data[4] > aWlim) | (sim_data[3] > aUlim))[0]   # hopefully this removes bimodal solutions
-    # pairfig = pairwise(sim_data, param_labels, title=qp_title+'\\textbf{ - $\\boldsymbol{\\mathbf{\\alpha_W>}}$ '+str(aWlim)+' or $\\boldsymbol{\\mathbf{\\alpha_U>}}$ '+str(aUlim)+' Solutions}', save_figs=save_figs, plot_dir=plot_dir, fn_comments=fn_comments+'_overplothigha', indsop=higha, oplotlabel='high $\\alpha$')
-    # pairfig = pairwise(sim_data, param_labels, title=qp_title+'\\textbf{ - $\\boldsymbol{\\mathbf{\\alpha_W>}}$ '+str(aWlim)+' or $\\boldsymbol{\\mathbf{\\alpha_U>}}$ '+str(aUlim)+' Solutions}', save_figs=save_figs, plot_dir=plot_dir, fn_comments=fn_comments+'_higha', indstp=higha)
+    # higha = np.where((sim_data[4] > aWlim) | (sim_data[3] > aUlim))[0]   # hopefully this removes bimodal solutions
+    # # pairfig = pairwise(sim_data, param_labels, title=qp_title+'\\textbf{ - $\\boldsymbol{\\mathbf{\\alpha_W>}}$ '+str(aWlim)+' or $\\boldsymbol{\\mathbf{\\alpha_U>}}$ '+str(aUlim)+' Solutions}', save_figs=save_figs, plot_dir=plot_dir, fn_comments=fn_comments+'_overplothigha', indsop=higha, oplotlabel='high $\\alpha$')
+    # # pairfig = pairwise(sim_data, param_labels, title=qp_title+'\\textbf{ - $\\boldsymbol{\\mathbf{\\alpha_W>}}$ '+str(aWlim)+' or $\\boldsymbol{\\mathbf{\\alpha_U>}}$ '+str(aUlim)+' Solutions}', save_figs=save_figs, plot_dir=plot_dir, fn_comments=fn_comments+'_higha', indstp=higha)
 
-    print('\n\nAnalyzing only HIGH aW and aU solutions:')
-    results_higha = qualityplots(data, sim_dict, plot_dir=plot_dir, save_figs=save_figs, fn_comments=fn_comments+'_higha', title=qp_title+'\\textbf{, high aW and aU (Mean)}', vmax=vmax, calc='mean', spinds=higha, plot=False)
-    params_higha, paramerrs_higha, kappas_med, kappaerrs_med, Gwire_med, sigmaGwire_med, chisq_med = results_higha
-    fit_higha = np.array([params_higha, paramerrs_higha])
+    # print('\n\nAnalyzing only HIGH aW and aU solutions:')
+    # results_higha = qualityplots(data, sim_dict, plot_dir=plot_dir, save_figs=save_figs, fn_comments=fn_comments+'_higha', title=qp_title+'\\textbf{, high aW and aU (Mean)}', vmax=vmax, calc='mean', spinds=higha)
+    # params_higha, paramerrs_higha, kappas_med, kappaerrs_med, Gwire_med, sigmaGwire_med, chisq_med = results_higha
+    # fit_higha = np.array([params_higha, paramerrs_higha])
 
-    print('\n\nAnalyzing only LOW aW and aU solutions:')
-    results_lowa = qualityplots(data, sim_dict, plot_dir=plot_dir, save_figs=save_figs, fn_comments=fn_comments+'_lowa', title=qp_title+'\\textbf{ low aW and aU (Mean)}', vmax=vmax, calc='mean', spinds=lowa, plot=False)
-    params_lowa, paramerrs_lowa, kappas_med, kappaerrs_med, Gwire_med, sigmaGwire_med, chisq_med = results_lowa
-    fit_lowa = np.array([params_lowa, paramerrs_lowa])
+    # print('\n\nAnalyzing only LOW aW and aU solutions:')
+    # results_lowa = qualityplots(data, sim_dict, plot_dir=plot_dir, save_figs=save_figs, fn_comments=fn_comments+'_lowa', title=qp_title+'\\textbf{ low aW and aU (Mean)}', vmax=vmax, calc='mean', spinds=lowa)
+    # params_lowa, paramerrs_lowa, kappas_med, kappaerrs_med, Gwire_med, sigmaGwire_med, chisq_med = results_lowa
+    # fit_lowa = np.array([params_lowa, paramerrs_lowa])
 
-    ### compare legacy predictions
-    data1b=np.array([ydata[0], sigma[0]]) if bolo1b else []  # plot bolo1b data?
+    # ### compare legacy predictions
 
-    predict_Glegacy(fit_higha, data1b=data1b, save_figs=save_figs, title=qp_title+' (High Alpha)', plot_comments=plot_comments+'_higha', fs=(7,7))
-    predict_Glegacy(fit_lowa, data1b=data1b, save_figs=save_figs, title=qp_title+' (Low Alpha)', plot_comments=plot_comments+'_lowa')
+    # predict_Glegacy(fit_higha, data1b=data1b, save_figs=save_figs, title=qp_title+' (High Alpha)', plot_comments=plot_comments+'_higha', fs=(7,7))
+    # predict_Glegacy(fit_lowa, data1b=data1b, save_figs=save_figs, title=qp_title+' (Low Alpha)', plot_comments=plot_comments+'_lowa')
 
     aWlim = 1.5E-4; GUlim = 0.63   # limits to delineate two solution spaces
-    lowGU = np.where((sim_data[4] < aWlim) & (sim_data[0] < GUlim))[0]
-    # pairfig = pairwise(sim_data, param_labels, title=qp_title+'\\textbf{ - $\\boldsymbol{\\mathbf{G_U<}}$ '+str(GUlim)+' pW/K Solutions}', save_figs=save_figs, plot_dir=plot_dir, fn_comments=fn_comments+'_overplotlowGU', indsop=lowGU, oplotlabel='low GU')
+    lowGU = np.where((sim_data[4] <= aWlim) & (sim_data[0] <= GUlim))[0]
+    pairfig = pairwise(sim_data, param_labels, title=qp_title+'\\textbf{ - $\\boldsymbol{\\mathbf{G_U<}}$ '+str(GUlim)+' pW/K and $\\boldsymbol{\\mathbf{\\alpha_W<}}$ '+str(aWlim)+' Solutions}', save_figs=save_figs, plot_dir=plot_dir, fn_comments=fn_comments+'_overplotlowGU', indsop=lowGU, oplotlabel='low GU')
     # pairfig = pairwise(sim_data, param_labels, title=qp_title+'\\textbf{ - $\\boldsymbol{\\mathbf{\\alpha_W<}}$ '+str(aWlim)+' and $\\boldsymbol{\\mathbf{\\alpha_U<}}$ '+str(aUlim)+' Solutions}', save_figs=save_figs, plot_dir=plot_dir, fn_comments=fn_comments+'_lowGU', indstp=lowGU)
 
     highGU = np.where((sim_data[4] > aWlim) | (sim_data[0] > GUlim))[0]
-    # pairfig = pairwise(sim_data, param_labels, title=qp_title+'\\textbf{ - $\\boldsymbol{\\mathbf{G_U>}}$ '+str(GUlim)+' pW/K Solutions}', save_figs=save_figs, plot_dir=plot_dir, fn_comments=fn_comments+'_overplotlowGU', indsop=highGU, oplotlabel='high GU')
+    pairfig = pairwise(sim_data, param_labels, title=qp_title+'\\textbf{ - $\\boldsymbol{\\mathbf{G_U>}}$ '+str(GUlim)+' pW/K or $\\boldsymbol{\\mathbf{\\alpha_W>}}$ '+str(aWlim)+' Solutions}', save_figs=save_figs, plot_dir=plot_dir, fn_comments=fn_comments+'_overplotlowGU', indsop=highGU, oplotlabel='high GU')
     # pairfig = pairwise(sim_data, param_labels, title=qp_title+'\\textbf{ - $\\boldsymbol{\\mathbf{\\alpha_W>}}$ '+str(aWlim)+' or $\\boldsymbol{\\mathbf{\\alpha_U>}}$ '+str(aUlim)+' Solutions}', save_figs=save_figs, plot_dir=plot_dir, fn_comments=fn_comments+'_higha', indstp=higha)
 
-    print('\n\nAnalyzing only HIGH GU solutions:')
-    results_highGU = qualityplots(data, sim_dict, plot_dir=plot_dir, save_figs=save_figs, fn_comments=fn_comments+'_highGU', title=qp_title+'\\textbf{, High GU (Mean)}', vmax=vmax, calc='mean', spinds=highGU, plot=False)
-    params_highGU, paramerrs_highGU, kappas_med, kappaerrs_med, Gwire_med, sigmaGwire_med, chisq_med = results_highGU
-    fit_highGU = np.array([params_highGU, paramerrs_highGU])
 
     print('\n\nAnalyzing only LOW GU solutions:')
-    results_lowGU = qualityplots(data, sim_dict, plot_dir=plot_dir, save_figs=save_figs, fn_comments=fn_comments+'_lowGU', title=qp_title+'\\textbf{, Low GU (Mean)}', vmax=vmax, calc='mean', spinds=lowGU, plot=False)
+    results_lowGU = qualityplots(data, sim_dict, plot_dir=plot_dir, save_figs=save_figs, fn_comments=fn_comments+'_lowGU', title=qp_title+'\\textbf{, Low GU (Mean)}', vmax=vmax, calc='mean', spinds=lowGU)
     params_lowGU, paramerrs_lowGU, kappas_med, kappaerrs_med, Gwire_med, sigmaGwire_med, chisq_med = results_lowGU
     fit_lowGU = np.array([params_lowGU, paramerrs_lowGU])
 
+    print('\n\nAnalyzing only HIGH GU solutions:')
+    results_highGU = qualityplots(data, sim_dict, plot_dir=plot_dir, save_figs=save_figs, fn_comments=fn_comments+'_highGU', title=qp_title+'\\textbf{, High GU (Mean)}', vmax=vmax, calc='mean', spinds=highGU)
+    params_highGU, paramerrs_highGU, kappas_med, kappaerrs_med, Gwire_med, sigmaGwire_med, chisq_med = results_highGU
+    fit_highGU = np.array([params_highGU, paramerrs_highGU])
+
     # compare legacy predictions
-    predict_Glegacy(fit_highGU, data1b=data1b, save_figs=save_figs, title=qp_title+' (High GU)', plot_comments=plot_comments+'_highGU', fs=(7,7))
-    predict_Glegacy(fit_lowGU, data1b=data1b, save_figs=save_figs, title=qp_title+' (Low GU)', plot_comments=plot_comments+'_lowGU')
+    predict_Glegacy(fit_lowGU, data1b=data1b, save_figs=save_figs, title=qp_title+'\\textbf{ (Low GU)}', plot_comments=plot_comments+'_lowGU')
+    predict_Glegacy(fit_highGU, data1b=data1b, save_figs=save_figs, title=qp_title+'\\textbf{ (High GU)}', plot_comments=plot_comments+'_highGU', fs=(7,7))
+
+    plot_modelvdata(fit_lowGU, data, title=qp_title+'\\textbf{ (Low GU)}', vlength_data=vlength_data, plot_bolotest=False)
+    plot_modelvdata(fit_highGU, data, title=qp_title+'\\textbf{ (High GU)}', vlength_data=vlength_data, plot_bolotest=False)
+
 
 if compare_modelanddata:
 
@@ -696,29 +627,218 @@ if compare_modelanddata:
     simresults_mean = np.array([np.mean(sim_dict['sim'], axis=0), np.std(sim_dict['sim'], axis=0)])
     simresults_med = np.array([np.median(sim_dict['sim'], axis=0), np.std(sim_dict['sim'], axis=0)])
 
-    if np.isinf(alim[1]):   # quality plot title
-        title = '$\\boldsymbol{\\mathbf{\\alpha \\in [0,\infty)}}$'   # plot title
-    else:
-        title = '$\\boldsymbol{\\mathbf{\\alpha \in [0,'+str(alim[1])+']}}$'   # plot title
+    # if np.isinf(alim[1]):   # quality plot title
+    #     title = '$\\boldsymbol{\\mathbf{\\alpha \\in [0,\infty)}}$'   # plot title
+    # else:
+    #     title = '$\\boldsymbol{\\mathbf{\\alpha \in [0,'+str(alim[1])+']}}$'   # plot title
+    title = '$\\boldsymbol{\\mathbf{\\alpha \in ['+str(alim[0])+','+str(alim[1])+']}}$ Model Predictions'   
 
     plot_modelvdata(simresults_mean, data, title=title+' (Mean)')
 
-    # check subsections of solutions
-    aWlim = 1.5E-4; GUlim = 0.63   # limits to delineate two solution spaces
-    lowGU = np.where((sim_data[4] < aWlim) & (sim_data[0] < GUlim))[0]
-    highGU = np.where((sim_data[4] > aWlim) | (sim_data[0] > GUlim))[0]
+    # # check subsections of solutions
+    # aWlim = 1.5E-4; GUlim = 0.63   # limits to delineate two solution spaces
+    # lowGU = np.where((sim_data[4] < aWlim) & (sim_data[0] < GUlim))[0]
+    # highGU = np.where((sim_data[4] > aWlim) | (sim_data[0] > GUlim))[0]
 
-    results_highGU = qualityplots(data, sim_dict, plot_dir=plot_dir, save_figs=save_figs, fn_comments=fn_comments+'_highgu', title=title+'\\textbf{, high aW and aU (Mean)}', vmax=vmax, calc='mean', spinds=highGU, plot=False)
-    params_highGU, paramerrs_highGU, kappas_med, kappaerrs_med, Gwire_med, sigmaGwire_med, chisq_med = results_highGU
-    fit_highGU = np.array([params_highGU, paramerrs_highGU])
+    # results_highGU = qualityplots(data, sim_dict, plot_dir=plot_dir, save_figs=save_figs, fn_comments=fn_comments+'_highgu', title=title+'\\textbf{, high aW or aU (Mean)}', vmax=vmax, calc='mean', spinds=highGU, plot=False)
+    # params_highGU, paramerrs_highGU, kappas_med, kappaerrs_med, Gwire_med, sigmaGwire_med, chisq_med = results_highGU
+    # fit_highGU = np.array([params_highGU, paramerrs_highGU])
 
-    # print('\n\nAnalyzing only LOW aW and aU solutions:')
-    results_lowGU = qualityplots(data, sim_dict, plot_dir=plot_dir, save_figs=save_figs, fn_comments=fn_comments+'_lowGU', title=title+'\\textbf{ low aW and aU (Mean)}', vmax=vmax, calc='mean', spinds=lowGU, plot=False)
-    params_lowGU, paramerrs_lowGU, kappas_med, kappaerrs_med, Gwire_med, sigmaGwire_med, chisq_med = results_lowGU
-    fit_lowGU = np.array([params_lowGU, paramerrs_lowGU])
+    # # print('\n\nAnalyzing only LOW aW and aU solutions:')
+    # results_lowGU = qualityplots(data, sim_dict, plot_dir=plot_dir, save_figs=save_figs, fn_comments=fn_comments+'_lowGU', title=title+'\\textbf{ low aW and aU (Mean)}', vmax=vmax, calc='mean', spinds=lowGU, plot=False)
+    # params_lowGU, paramerrs_lowGU, kappas_med, kappaerrs_med, Gwire_med, sigmaGwire_med, chisq_med = results_lowGU
+    # fit_lowGU = np.array([params_lowGU, paramerrs_lowGU])
 
-    plot_modelvdata(fit_lowGU, data, title=title+', Low GU Solns')
-    plot_modelvdata(fit_highGU, data, title=title+', High GU Solns')
+    # plot_modelvdata(fit_lowGU, data, title=title+', Low GU Solns')
+    # plot_modelvdata(fit_highGU, data, title=title+', High GU Solns')
 
+if analyze_vlengthdata:
+
+    # how does G vary with L?
+    # p0=[1,-0.5,25]
+    # params_lb, t_lb, sigmat_lb = fit_power(ll_vl, ydatavl_lb, p0, sigma=sigmavl_lb, absolute_sigma=True)
+    # # params_mb, t_mb, sigmat_mb = fit_power(ll_vl, ydatavl_mb, p0, sigma=sigmavl_mb, absolute_sigma=True)
+    # params_all, t_all, sigmat_all = fit_power(llvl_all, ydatavl_all, p0, sigma=sigmavl_all, absolute_sigma=True)
+
+    # ll_toplot = np.logspace(-1., 0)
+    # plt.figure()
+    # plt.errorbar(ll_vl*1E3, ydatavl_lb, yerr=sigmavl_lb, label='Less BLING', linestyle='None', capsize=3, capthick=2, alpha=0.7)
+    # plt.errorbar(ll_vl*1E3, ydatavl_mb, yerr=sigmavl_mb, label='More BLING', linestyle='None', capsize=3, capthick=2, alpha=0.7, color='C3')
+    # plt.plot(ll_toplot*1E3, monopower(ll_toplot, params_lb[0], params_lb[1], params_lb[2]), alpha=0.5, color='C0')
+    # # plt.plot(ll_toplot*1E3, monopower(ll_toplot, params_mb[0], params_mb[1], params_mb[2]), alpha=0.5, color='C3')
+    # plt.ylabel('G [pW/K]'); plt.xlabel('Leg Length [um]')
+    # plt.legend()
+    # plt.yscale('log'); plt.xscale('log')
+    # plt.annotate('$\\beta={t} \\pm {err}$'.format(t=round(-t_lb, 2), err=round(sigmat_lb, 2)), (220, 15), color='C0', fontsize=15, weight='bold')
+    # # plt.annotate('$\\beta={t} \\pm {err}$'.format(t=round(-t_mb, 2), err=round(sigmat_mb, 2)), (320, 11.25), color='C3', fontsize=15, weight='bold')
+    # plt.title('G$~$L$^{-\\beta}$ -- $\\beta_{all}='+str(round(-t_all, 2))+' \\pm '+str(round(sigmat_all, 2))+'$')
+
+    # compare to model predictions
+    with open(sim_file, 'rb') as infile:   # load simulation pkl
+        sim_dict = pkl.load(infile)
+    sim_dataT = sim_dict['sim']; sim_data = sim_dataT.T   # simulation parameter values
+    simresults_mean = np.array([np.mean(sim_dict['sim'], axis=0), np.std(sim_dict['sim'], axis=0)])
+    # simresults_med = np.array([np.median(sim_dict['sim'], axis=0), np.std(sim_dict['sim'], axis=0)])
+
+    title = 'Predictions for Bolotest Data, '   
+    plot_modelvdata(simresults_mean, data, title=title+' $\\sigma_G$ = 0.8\\% G', plot_bolotest=True)
+    # plot_modelvdata(simresults_mean, data, title=title+' Bolos 1a-f', vlength_data=vlength_data, plot_bolotest=False)
+    # plot_modelvdata(simresults_mean, data, title=title+' Bolos 1a-f, $\\beta=0.8$', vlength_data=vlength_data, plot_bolotest=False, Lscale=0.8)
+
+
+if byeye:
+
+    params_byeye = np.array([0.7, 0.8, 1.3, 1, 0.5, 1.2])
+    sigma_params = np.array([0, 0, 0, 0, 0, 0])
+    fit = np.array([params_byeye, sigma_params])
+    title = 'Hand-chosen fit parameters '   
+    data1b = np.array([ydata[0], sigma[0]]) if bolo1b else []  # plot bolo1b data?
+
+    results = qualityplots(data, params_byeye, plot_dir=plot_dir, save_figs=save_figs, fn_comments=fn_comments, title=title, vmax=1E3, calc='mean', qplim=qplim)
+
+    predict_Glegacy(fit, data1b=data1b, save_figs=save_figs, title=title, plot_comments=fn_comments, fs=(7,7))
+    plot_modelvdata(fit, data, title=title+' L=220 um Bolos', plot_bolotest=True)
+    plot_modelvdata(fit, data, title=title+' Bolos 1a-f and bolotest', vlength_data=vlength_data, plot_bolotest=False)
+    plot_modelvdata(fit, data, title=title+' Bolos 1a-f and bolotest, $\\beta=0.8$', vlength_data=vlength_data, plot_bolotest=False, Lscale=0.8)
+
+
+    # testdd0 = np.linspace(0.01, 2)
+    # plt.figure()
+    # plt.plot(testdd0, testdd0**1, label='alpha=0')
+    # plt.plot(testdd0, testdd0**1.5, label='alpha=0.5')
+    # plt.plot(testdd0, testdd0**2, label='alpha=1')
+    # plt.plot(testdd0, testdd0**2.5, label='alpha=1.5')
+    # plt.legend()
+    # plt.xlabel('d/d0')
+
+if scrap:
+
+    # f = 0.9   # fraction of diffuse reflections; 1 = Casimir limit
+    # n = 1
+    # Jtest = np.arange(10)
+    # Jtest = np.array([1E-10, 1, 2, 3, 4, 5, 6, 7, 8, 9])
+    # kdtest = np.array([1, 0, 0, 0, 0, 0, 0, 0, 0, 0])
+    # funcvals = [sumfunc_J(n, f, Jt) for Jt in Jtest]
+    # firstvals = [firstterm(n, Jt) for Jt in Jtest]
+    # secondvals = [secondterm(n, Jt, kdtest[jj]) for jj, Jt in enumerate(Jtest)] 
+
+    # reproduce Wyborne84 Fig 1 - this is correct
+    # dtest = np.ones(50); wtest = np.linspace(1,50)
+    # plt.figure(); plt.plot(wtest/dtest, (1-l_bl(wtest, dtest)/l_Casimir(wtest, dtest))*100)
+    # plt.xlabel('n'); plt.ylabel('1-l_b/l_C [%]')
+    # plt.xlim(0,50); plt.ylim(0,60)
+
+
+    # wtest = 7   # um
+    # dtest = 0.4   # um
+    # ftest = 0.9
+    # # leff = l_eff(wtest, dtest, ftest, sumlim=100)   # um
+    # lb_test = l_bl(wtest, dtest)
+
+    # f_W = np.linspace(0,1)
+    # ftest = np.array([0.05, 0.1,  0.2,  0.3,  0.4,  0.5,  0.6,  0.7,  0.8,  0.9])
+    # w_W=6; d_W=.3   # um, beam dimensions in Wybourne 84
+    # lb = l_bl(w_W, d_W)*np.ones(len(f_W))   # um
+    # leff_W = [l_eff(w_W, d_W, ff, sumlim=100)  for ff in f_W] # um
+    # leff_test = [l_eff(w_W, d_W, ff, sumlim=100)  for ff in ftest] # um
+    # leff_test = [l_eff(wtest, dtest, ff, sumlim=100)  for ff in ftest] # um
+    # leff_W = l_eff(w_W, d_W, f_W, sumlim=100)   # um
+    # plt.figure(); plt.plot(f_W, leff_W, '.')
+
+    # plt.figure(); plt.plot(ftest, l_eff(w_W, d_W, ftest)/lb, '.')
+    # # plt.ylim(1,8.5)
+    # plt.ylabel('$\gamma$'); plt.xlabel('f')
+
+    ftest = np.array([0.01, 0.2, 0.4, 0.6,  0.8, 1])
+    # wtest=6; dtest=6   # um, n=1
+    ntest = np.array([1, 5, 10])   # aspect ratio
+    # ntest = 1   # aspect ratio
+    # ntest = np.array([1])   # aspect ratio
+    dtest = 1; wtest = dtest*ntest   # um
+    # ntest = wtest/dtest
+    # Jtest = 0
+    # sumfunc_J(1, 0.1, Jtest)   # this increases with increasing f, regardless of J
+    # firstterm(1, Jtest)   # this increases with increasing f, regardless of J
+    leff_test = np.array([l_eff(wtest, dtest, ff, sumlim=1E4) for ff in ftest]) # um
+    lb = l_bl(wtest, dtest)   # um
+
+    
+    plt.figure()
+    lineObjects = plt.plot(ftest, leff_test/lb, '.')
+    # plt.plot(ftest, leff_test/min(leff_test), '.', label='Normalized leff')
+    # plt.ylim(1,8.5)
+    plt.ylabel('$\gamma$'); plt.xlabel('f')
+    plt.legend(iter(lineObjects), ['n = {}'.format(nt) for nt in ntest])
+
+    # def prefactor(f, J):
+    #     return f * (1-f)**(J)
+    #     # return (f*(1-f))**J
+    
+    # plt.figure()
+    # plt.plot(ftest, prefactor(ftest, 0), label='J=0')
+    # plt.plot(ftest, prefactor(ftest, 1), label='J=1')
+    # plt.plot(ftest, prefactor(ftest, 2), label='J=2')
+    # plt.plot(ftest, prefactor(ftest, 3), label='J=3')
+    # plt.plot(ftest, prefactor(ftest, 4), label='J=4')
+    # plt.plot(ftest, prefactor(ftest, 10), label='J=10')
+    # plt.xlabel('f'); plt.ylabel('Prefactor Value Evaluated at J')
+    # plt.legend()
+
+    # plt.figure()
+    # plt.plot(ftest, np.sum([prefactor(ftest, JJ) for JJ in np.arange(0, 1)], axis=0), label='Sum up to J=0')
+    # plt.plot(ftest, np.sum([prefactor(ftest, JJ) for JJ in np.arange(0,2)], axis=0), label='Sum up to J=1')
+    # plt.plot(ftest, np.sum([prefactor(ftest, JJ) for JJ in np.arange(0,3)], axis=0), label='Sum up to J=2')
+    # plt.plot(ftest, np.sum([prefactor(ftest, JJ) for JJ in np.arange(0,5)], axis=0), label='Sum up to J=5')
+    # plt.plot(ftest, np.sum([prefactor(ftest, JJ) for JJ in np.arange(0,10)], axis=0), label='Sum up to J=10')
+    # plt.plot(ftest, np.sum([prefactor(ftest, JJ) for JJ in np.arange(0,100)], axis=0), label='Sum up to J=100')
+    # plt.plot(ftest, np.sum([prefactor(ftest, JJ) for JJ in np.arange(0,1000)], axis=0), label='Sum up to J=1000')
+    # plt.plot(ftest, np.sum([prefactor(ftest, JJ) for JJ in np.arange(0,1E4)], axis=0), label='Sum up to J=1E4')
+    # plt.legend()
+    # plt.xlabel('f'); plt.ylabel('Prefactor Value Cumulative Sum')
+    # plt.title('Sum of f(1-f)$^J$ over J')
+
+    # sumlims = np.array([1, 1E1, 1E2, 1E3, 1E4, 1E5])
+
+    # sumvals1 = np.array([np.sum([(firstterm(1, JJ) + secondterm(1,JJ)) for JJ in np.arange(0,sl)], axis=0) for sl in sumlims])
+    # sumvals5 = np.array([np.sum([(firstterm(5, JJ) + secondterm(5, JJ)) for JJ in np.arange(0,sl)], axis=0) for sl in sumlims])
+    # sumvals10 = np.array([np.sum([(firstterm(10, JJ) + secondterm(10, JJ)) for JJ in np.arange(0,sl)], axis=0) for sl in sumlims])
+    # sumvals20 = np.array([np.sum([(firstterm(20, JJ) + secondterm(20, JJ)) for JJ in np.arange(0,sl)], axis=0) for sl in sumlims])
+    # plt.figure()
+    # plt.plot(sumlims, sumvals1, label='n=1')
+    # plt.plot(sumlims, sumvals5, label='n=5')
+    # plt.plot(sumlims, sumvals10, label='n=10')
+    # plt.plot(sumlims, sumvals20, label='n=20')
+    # plt.xlabel('Max J in Summation'); plt.ylabel('Summed J Values')
+    # plt.legend()
+    # plt.yscale('log')
+
+    # leffvals1 = np.array([l_eff(wtest, dtest, 0.99, sumlim=sl) for sl in sumlims])
+    # leffvals05 = np.array([l_eff(wtest, dtest, 0.5, sumlim=sl) for sl in sumlims])
+    # leffvals0 = np.array([l_eff(wtest, dtest, 0.01, sumlim=sl) for sl in sumlims])
+    # plt.figure()
+    # plt.plot(sumlims, leffvals1, label='f=0.99')
+    # plt.plot(sumlims, leffvals05, label='f=0.5')
+    # plt.plot(sumlims, leffvals0, label='f=0.01')
+    # plt.xlabel('Max J in Summation'); plt.ylabel('leff Values')
+    # plt.legend()
+    # plt.yscale('log')
+
+    # # Jrange = np.array([0, 1, 10, 50, 100, 500, 1000, 5000, 1E4, 5E4, 1E5])
+    # Jrange = np.array([0, 1, 10, 50, 100])
+    # termvals1 = np.array([(firstterm(1, JJ) + secondterm(1, JJ)) for JJ in Jrange])
+    # # termvals2 = np.array([(firstterm(2, JJ) + secondterm(2, JJ)) for JJ in Jrange])
+    # termvals10 = np.array([(firstterm(10, JJ) + secondterm(10, JJ)) for JJ in Jrange])
+    # termvals20 = np.array([(firstterm(20, JJ) + secondterm(20, JJ)) for JJ in Jrange])
+    # termvals50 = np.array([(firstterm(50, JJ) + secondterm(50, JJ)) for JJ in Jrange])
+    # plt.figure()
+    # plt.plot(Jrange, termvals1, '.', label='n=1')
+    # # plt.plot(Jrange, termvals2, '.', label='n=2')
+    # plt.plot(Jrange, termvals10, '.', label='n=10')
+    # plt.plot(Jrange, termvals20, '.', label='n=20')
+    # plt.plot(Jrange, termvals50, '.', label='n=50')
+    # plt.xlabel('J'); plt.ylabel('First Term + Second Term at J')
+    # # plt.xscale('log')
+    # plt.yscale('log')
+    # plt.legend()
 
 plt.show()
