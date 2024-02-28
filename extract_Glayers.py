@@ -8,16 +8,7 @@ aharkehosemann@gmail.com
 2022/01
 
 
-UPDATES
-2023/07/12: quote mean values, note bimodality and put total population in SI but note two populations share the same chi-squared
-
-2023/08/09: Added non-equilibrium correction to TF NEP calculation
-
-2023/08/11: There was probably a bookkeeping error during bolotest measurements that swapped Pads 10 and 11 = bolo1c and bolo1b measurements with more BLING. If we ignore extra bling bolos, this doesn't matter.
-
-2023/09/14: Why are the bolotest error bars larger than the legacy ones? Probably because the error bars on the W layers are so big and they matter more for bolotest devices. 
-check line 118 in routines
-redo sigma_G = some percent G analysis with updated sigma_G calculation
+UPDATES :
 
 2023/11/14 : W2 etches SiN faster than previously thought. I1 in I1-I2 stack could be 213nm-312nm (large error bars here), bare S could be as small as 100 nm.
 Actually, this is only true for one nitride. Data says PECVD (I) etches much faster, but I think there was a bookkeeping error and LPCVD (S) etches faster.
@@ -29,6 +20,8 @@ width of the layer above when I layers are removed, e.g., I1 is 3 um on Leg B wh
 added dS_E, dI1_ABCF -> dI_DF (now full I1-I2 stack), dI2_ACDF -> dI2_AC, added dW2_BE (= d_W1W2), dW2_BE -> dW2_B
 changed the width of W in Leg E and Leg B I1, need to change Leg E substrate width
 
+2024/02/28 : added ability to bootstrap thicknesses within layer-specific error bars
+
 TODO: two layer model where all nitride is treated the same?
 """
 from bolotest_routines import *
@@ -36,75 +29,59 @@ from scipy.optimize import fsolve
 import csv 
 
 ### User Switches
-# choose analysis
+# analysis
 run_sim = True   # run MC simulation for fitting model
-quality_plots = True   # results on G_x vs alpha_x parameter space for each layer
-pairwise_plots = True   # histogram and correlations of all simulated fit parameters
+quality_plots = False   # results on G_x vs alpha_x parameter space for each layer
+pairwise_plots = True   # histogram and correlations of simulated fit parameters
 compare_modelanddata = True   # plot model predictions and bolotest data
-compare_legacy = True   # compare with NIST sub-mm bolo legacy data
-lit_compare = False   # compare measured conductivities with literature values
-design_implications = False
-analyze_vlengthdata = False
-manual_params = False   # pick parameters manually and compare fits
+compare_legacy = False   # compare with NIST sub-mm bolo legacy data
+lit_compare = False   # compare measured conductivities with values from literature
+design_implications = False   # NEP predictions from resulting model
+analyze_vlengthdata = False   # look at bolotest data vs length
+manual_params = False   # pick parameters manually and compare data
 scrap = False
 
 # options
-save_sim = True   # save full simulation
-save_figs = True   
-save_csv = True   # save csv file of resulting parameters
-show_yplots = False   # show simulated y-data plots during MC simulation
+show_simGdata = False   # show simulated y-data plots during MC simulation
 calc_Gwire = False   # calculate G of the wiring stack if it wasn't saved during the simulation
 constrained = False   # use constrained model results
-vary_thickness = False   # vary film thicknesses during simulation
-latex_fonts = True
 
+# save results
+save_figs = True   # save figures 
+save_sim = True   # save simulation data
+save_csv = True   # save csv file of results
+
+# where to save results
 analysis_dir = '/Users/angi/NIS/Bolotest_Analysis/'
-# fn_comments = '_alphaninfpinf_lessbling'; alim = [-np.inf, np.inf]; sigmaG_frac = 0.0; derr = 0.00    # fitting in (-infinity,infinity)
-# fn_comments = '_alphan1top1'; alim = [-1, 1]; sigmaG_frac = 0.0; derr = 0.00   # fitting alpha in [-1,1]
-# fn_comments = '_alphaninfpinf'; alim = [-np.inf, np.inf]; sigmaG_frac = 0.0; derr = 0.00   # fitting alpha in (-infinity,infinity)
-# fn_comments = '_alphaninfpinf_varythickness_0percent'; alim = [-np.inf, np.inf]; sigmaG_frac = 0.; vary_thickness = True; derr = 0.00   # allow all layer thicknesses to vary within 0%
-# fn_comments = '_alphaninfpinf_varythickness_1percent'; alim = [-np.inf, np.inf]; sigmaG_frac = 0.; vary_thickness = True; derr = 0.01   # allow all layer thicknesses to vary within 1%
-# fn_comments = '_alphaninfpinf_postFIB'; alim = [-np.inf, np.inf]; sigmaG_frac = 0.; vary_thickness = False; derr = 0.0   # after FIB measurements
-# fn_comments = '_alphaninfpinf_postFIB_thinnerI1onlegA'; alim = [-np.inf, np.inf]; sigmaG_frac = 0.; vary_thickness = False; derr = 0.0   # after FIB measurements
-# fn_comments = '_alphaninfpinf_postFIB_eventhinnerI1onlegA'; alim = [-np.inf, np.inf]; sigmaG_frac = 0.; vary_thickness = False; derr = 0.0   # after FIB measurements
-# fn_comments = '_alphaninfpinf_postFIB_v3'; alim = [-np.inf, np.inf]; sigmaG_frac = 0.; vary_thickness = False; derr = 0.0   # third go at adjusting thicknesses from FIB measurements
-# fn_comments = '_rerun_originalthicknesses'; alim = [-np.inf, np.inf]; sigmaG_frac = 0.; vary_thickness = False; derr = 0.0   # first attempt to adjust I widths that more closely follow W widths than previously assumed
-# fn_comments = '_postFIB_v4_dontadjustIwidths'; alim = [-np.inf, np.inf]; sigmaG_frac = 0.; vary_thickness = False; derr = 0.0   # 
-# fn_comments = '_postFIB_v5_adjustlegBI1width'; alim = [-np.inf, np.inf]; sigmaG_frac = 0.; vary_thickness = False; derr = 0.0   # 
-# fn_comments = '_postFIB_v5_butthinnerI2'; alim = [-np.inf, np.inf]; sigmaG_frac = 0.; vary_thickness = False; derr = 0.0   # 
-# fn_comments = '_postFIB_test'; alim = [-np.inf, np.inf]; sigmaG_frac = 0.; vary_thickness = False; derr = 0.0   # 
-fn_comments = '_postFIB_Feb'; alim = [-np.inf, np.inf]; sigmaG_frac = 0.; vary_thickness = False; derr = 0.0   # 
+fn_comments = '_postFIB_varydtest'; alim = [-np.inf, np.inf]; sigmaG_frac = 0.; vary_thickness = True; # vary film thickness, layer-specific error bars
 
-n_its = int(1E2)   # number of iterations for MC simulation
+n_its = int(1E3)   # number of iterations in MC simulation
 vmax = 1E3   # quality plot color bar scaling
-calc = 'Median'   # how to evaluate fit parameters from simluation data
-qplim = [-1,2]
-bolo1b = True   # add bolo1 data to legacy prediction comparison plot
+calc = 'Median'   # how to evaluate fit parameters from simluation data - options are 'Mean' and 'Median'
+qplim = [-1,2]   # x- and y-axis limits for quality plot
+plot_bolo1b = True   # add bolo1 data to legacy prediction comparison plot
 
 ### layer thicknesses
-# layer_d0 = np.array([0.420, 0.400, 0.340, 0.160, 0.100, 0.350, 0.270, 0.340, 0.285, 0.400])   # original layer thicknesses, or center layer thickness if varying thickness
-# layer_d0 = np.array([0.420, 0.330, 0.160, 0.160, 0.100, 0.350, 0.330, 0.340, 0.285, 0.400])   # original layer thicknesses, or center layer thickness if varying thickness
-# layer_d0 = np.array([0.420, 0.330, 0.160, 0.160, 0.100, 0.350, 0.212, 0.340, 0.285, 0.400])   # original layer thicknesses, or center layer thickness if varying thickness
-# layer_d0 = np.array([0.420, 0.330, 0.160, 0.160, 0.100, 0.350, 0.270, 0.340, 0.285, 0.400])   # original layer thicknesses, or center layer thickness if varying thickness
-# layer_d0 = np.array([0.420, 0.330, 0.160, 0.160, 0.100, 0.350, 0.340, 0.340, 0.285, 0.400])   # original layer thicknesses, or center layer thickness if varying thickness
-# layer_d0 = np.array([0.320, 0.300, 0.100, 0.160, 0.100, 0.340, 0.198, 0.340, 0.300, 0.270])   # updated numbers from FIB
-# layer_d0 = np.array([0.320, 0.300, 0.100, 0.160, 0.100, 0.265, 0.198, 0.340, 0.300, 0.270])   # updated numbers from FIB, thinner dI1 on leg A
-# layer_d0 = np.array([0.320, 0.300, 0.100, 0.160, 0.100, 0.230, 0.198, 0.340, 0.300, 0.270])   # updated numbers from FIB, even thinner dI1 on leg A
-# layer_d0 = np.array([0.360, 0.360, 0.150, 0.150,   0.100,  0.340,  0.300,  0.350, 0.300, 0.270])   # updated numbers from FIB v3
-                 # dS_ABDE, dS_CF, dS_G, dW1_ABD, dW1_E, dI1_ABCF, dI1_D, dW2_AC, dW2_BE, dI2_ACDF = layer_ds
-# layer_d0 = np.array([0.372, 0.312, 0.108, 0.181, 0.162, 0.418,  0.298,  0.596,  0.354, 0.314, 0.302])   # updated numbers from February FIB measurements, added dS_E, dI1_ABCF -> dI1_DF (now full I1-I2 stack), dI2_ACDF -> dI2_AC, dW2_BE (= d_W1W2), dW2_BE -> dW2_B
-                #   dS_ABD, dS_CF, dS_E,  dS_G, dW1_ABD,  dW1_E, dI1_ABC, dI1_DF, dW2_AC, dW2_BE, dI2_AC = layer_ds
-                #     there needs to be dS_E1 and dS_E2 for two different widths
+# values
+dS_ABD = 0.372; dS_CF = 0.312; dS_E1 = 0.108; dS_E2 = 0.321; dS_G = 0.181   # [um] substrate thickness for different legs, originally 420, 400, 420, 340, 0
+dW1_ABD = 0.162; dW1_E = 0.418   # [um] W1 thickness for different legs, originally 160, 100
+dI1_ABC = 0.298; dI_DF = 0.596   # [um] I1 thickness for different legs, originally 350, 270
+# dI1_ABC = 0.258; dI_DF = 0.610   # [um] I1 thickness for different legs, originally 350, 270
+dW2_AC = 0.354; dW2_BE = 0.314   # [um] W2 thickness for different legs, originally 340, 285
+dI2_AC = 0.302   # [um] I2 thickness, originally 400
+# dI2_AC = 0.252   # [um] I2 thickness, originally 400
 
-# dS_ABD = 0.320; dS_CF = 0.360; dS_E = 0.00, dS_G1 = 0.150; dS_G2 = 0.00   # [um] substrate thickness for different legs, originally 420, 400, 340
-# dW1_ABD = 0.160; dW1_E = 0.100   # [um] W1 thickness for different legs, originally 160, 100
-# dI1_ABCF = 0.250; dI1_D = 0.320   # [um] I1 thickness for different legs, originally 350, 270
-# dW2_AC = 0.350; dW2_BE = 0.320   # [um] W2 thickness for different legs, originally 340, 285
-# dI2_ACDF = 0.270   # [um] I2 thickness, originally 400
-# # dI2_ACDF = 0.350   # [um] I2 thickness, originally 400
+# error bars
+dSABD_err = 0.032; dSCF_err = 0.012; dSE1_err = 0.052; dSE2_err = 0.024; dSG_err = 0.048   # [um] substrate thickness error bars, originally 420, 400, 420, 340, 0 nm
+dW1ABD_err = 0.008; dW1E_err = 0.00   # [um] W1 thickness error bars, originally 160, 100 nm
+dI1ABC_err = 0.040; dIDF_err = 0.018   # [um] I1 thickness error bars, originally 350, 270 nm
+dW2AC_err = 0.013; dW2BE_err = 0.012   # [um] W2 thickness error bars, originally 340, 285 nm
+dI2AC_err = 0.047   # [um] I2 thickness, originally 400
 
-# dS_G = (4*dS_G1 + 3*dS_G2)/7   # S layer with step in height
-# layer_d0 = np.array([dS_ABDE, dS_CF, dS_G, dW1_ABD, dW1_E, dI1_ABCF, dI1_D, dW2_AC, dW2_BE, dI2_ACDF])
+dS_E = (4*dS_E1 + 3*dS_E2)/7; dSE_err = (4*dSE1_err + 3*dSE2_err)/7  # width-weighted thickness, S layer with step in height
+layer_d0 = np.array([dS_ABD, dS_CF, dS_E, dS_G, dW1_ABD,  dW1_E, dI1_ABC, dI_DF, dW2_AC, dW2_BE, dI2_AC])
+derrs = np.array([dSABD_err, dSCF_err, dSE_err, dSG_err, dW1ABD_err,  dW1E_err, dI1ABC_err, dIDF_err, dW2AC_err, dW2BE_err, dI2AC_err])
+# derrs = np.ones_like(layer_d0)*0.0
 
 # initial guess for fitter
 p0_a0inf = np.array([0.7, 0.75, 1.2, 0.75, 0.1, 1.])   # U, W, I [pW/K], alpha_U, alpha_W, alpha_I [unitless]
@@ -131,32 +108,23 @@ vlength_data = np.stack([ydatavl_all, sigmavl_all, llvl_all*1E3])
 
 # for plotting
 param_labels = ['G$_U$', 'G$_W$', 'G$_I$', '$\\alpha_U$', '$\\alpha_W$', '$\\alpha_I$']  
-a0str = '(-\infty' if np.isinf(alim[0]) else '['+str(alim[0])
-a1str = '\infty)' if np.isinf(alim[1]) else str(alim[1])+']'
-if vary_thickness: 
-    plot_title = '$\\boldsymbol{\\mathbf{\\sigma_d='+str(derr*100)+'\\%\\times d_0,\ \\alpha \in '+a0str+','+a1str+'}}$'
-else:
-    plot_title = '$\\boldsymbol{\\mathbf{\\alpha \in '+a0str+','+a1str+'}}$'   
+a0str = '(-\infty' if np.isinf(alim[0]) else '['+str(alim[0]); a1str = '\infty)' if np.isinf(alim[1]) else str(alim[1])+']'
+plot_title = '$\\boldsymbol{\\mathbf{\\alpha \in '+a0str+','+a1str+'}}$'   
 
-if latex_fonts:   # fonts for paper plots
-    plt.rc('text', usetex=True)
-    plt.rc('font', family='serif')
-    plt.rc('font', size=15)
-    plt.rc('font', weight='normal')
-    plt.rcParams['text.latex.preamble']="\\usepackage{amsmath}"
-    plt.rcParams['xtick.major.size'] = 5; plt.rcParams['xtick.minor.visible'] = False    
-    plt.rcParams['ytick.major.size'] = 5; plt.rcParams['ytick.minor.visible'] = False
+# use LaTeX fonts for paper plots
+plt.rc('text', usetex=True); plt.rc('font', family='serif'); plt.rc('font', size=15); plt.rc('font', weight='normal')
+plt.rcParams['text.latex.preamble']="\\usepackage{amsmath}"; plt.rcParams['xtick.major.size'] = 5; plt.rcParams['xtick.minor.visible'] = False    
+plt.rcParams['ytick.major.size'] = 5; plt.rcParams['ytick.minor.visible'] = False
 
 ### Execute Analysis
-if run_sim:   # run simulation with just hand-written function
-    sim_dict = runsim_chisq(n_its, p0, data, bounds, plot_dir, show_yplots=show_yplots, save_figs=save_figs, save_sim=save_sim, sim_file=sim_file, fn_comments=fn_comments, vary_thickness=vary_thickness, derr=derr, layer_d0=layer_d0)  
+if run_sim:   # run simulation 
+    sim_dict = runsim_chisq(n_its, p0, data, bounds, plot_dir, show_simGdata=show_simGdata, save_figs=save_figs, save_sim=save_sim, sim_file=sim_file, fn_comments=fn_comments, vary_thickness=vary_thickness, derrs=derrs, layer_d0=layer_d0)  
 else:   # load simulation data
     with open(sim_file, 'rb') as infile:   # load simulation pkl
         sim_dict = pkl.load(infile)
 sim_data = sim_dict['sim']
 
 if quality_plots:   # plot G_x vs alpha_x parameter space with various fit results
-
     ### plot fit in 2D parameter space, take mean values of simulation
     results_mean = qualityplots(data, sim_dict, plot_dir=plot_dir, save_figs=save_figs, fn_comments=fn_comments+'_mean', title=plot_title+'\\textbf{ (Mean)}', vmax=vmax, calc='Mean', qplim=qplim, layer_ds=layer_d0)
     params_mean, paramerrs_mean, kappas_mean, kappaerrs_mean, Gwire_mean, sigmaGwire_mean, chisq_mean = results_mean
@@ -197,17 +165,14 @@ if compare_legacy:   # compare G predictions with NIST legacy data
 
     L = 220   # bolotest leg length, um
     boloGs = ydata; sigma_boloGs = sigma   # choose bolotest G's to compare
-    wstack_width = (5*0.100+3*0.285)/(0.100+0.285)   # um, effective width of W1 W2 stack on bolo 20
-    A_bolo = np.array([(7*4*.420+5*4*.160+3*4*.340+7*4*.350+7*4*.400), (7*1*.420+7*3*.340+5*.160+3*.340+7*.350+7*.400), (7*2*.420+7*2*.340+5*2*.160+3*2*.340+7*2*.350+7*2*.400), (7*3*.420+7*1*.340+5*3*.160+3*3*.340+7*3*.350+7*3*.400), (7*1*.420+7*3*.400+5*1*.160+3*1*.285+7*3*.370+7*1*.350), (7*4*.420+5*1*.160+wstack_width*3*.385+3*1*.285+7*1*.340), (7*3*.420+7*1*.400+5*3*.160+3*1*3.340+7*3*.350+7*1*.670+7*3*.400), (7*1*.420+7*3*.400+5*1*.160+3*1*.285+7*1*.350) ])   # bolotest areas
-    AoL_bolo = A_bolo/L   # A/L for bolotest devices
-    data1b = np.array([ydata[0], sigma[0]]) if bolo1b else []  # plot bolo1b data?
+    AoL_bolo = bolotest_AoL(L=L, layer_ds=layer_d0)   # A/L for bolotest devices
+    data1b = np.array([ydata[0], sigma[0]]) if plot_bolo1b else []  # plot bolo1b data?
 
     # compare with legacy data
     predict_Glegacy(sim_data, data1b=data1b, pred_wfit=False, calc=calc, save_figs=save_figs, title=title+'$\\textbf{ ('+calc+')}$', plot_comments=fn_comments+'_'+calc, fs=(7,7))
-    # predict_Glegacy(sim_data, data1b=data1b, pred_wfit=False, calc='Median', save_figs=save_figs, title=title+'$\\textbf{ (Median)}$', plot_comments=fn_comments+'_median'+calc, fs=(7,7))
     predict_Glegacy(sim_data, data1b=data1b, pred_wfit=False, calc='Median', save_figs=save_figs, title=title+'$\\textbf{ (Median), }\\mathbf{\\beta=0.8}$', plot_comments=fn_comments+'_median_beta0p8', fs=(7,7), Lscale=0.8)
-    predict_Glegacy(sim_data, data1b=data1b, pred_wfit=False, calc='Mean', save_figs=save_figs, title=title+'$\\textbf{ (Mean)}$', plot_comments=fn_comments+'_mean', fs=(7,7))
-    predict_Glegacy(sim_data, data1b=data1b, pred_wfit=False, calc='Mean', save_figs=save_figs, title=title+'$\\textbf{ (Mean), }\\mathbf{\\beta=0.8}$', plot_comments=fn_comments+'_mean_beta0p8', fs=(7,7), Lscale=0.8)
+    # predict_Glegacy(sim_data, data1b=data1b, pred_wfit=False, calc='Mean', save_figs=save_figs, title=title+'$\\textbf{ (Mean)}$', plot_comments=fn_comments+'_mean', fs=(7,7))
+    # predict_Glegacy(sim_data, data1b=data1b, pred_wfit=False, calc='Mean', save_figs=save_figs, title=title+'$\\textbf{ (Mean), }\\mathbf{\\beta=0.8}$', plot_comments=fn_comments+'_mean_beta0p8', fs=(7,7), Lscale=0.8)
     
     title = '$\\textbf{ Legacy Data - }$'   
     lAoLscale = 1.8
@@ -220,13 +185,6 @@ if compare_legacy:   # compare G predictions with NIST legacy data
 if lit_compare:
 
     ### load fit results
-    # with open(sim_file, 'rb') as infile:   # load simulation pkl
-    #     sim_dict = pkl.load(infile)
-    # if 'inf' in sim_file:
-    #     sim_results = [np.median(sim_dict['sim'], axis=0), np.std(sim_dict['sim'], axis=0)]   # take median value instead of mean for alpha=[0,inf] model
-    # else:
-    #     sim_results = [sim_dict['fit']['fit_params'], sim_dict['fit']['fit_std']]
-    # sim_dataT = sim_dict['sim']; sim_data = sim_dataT.T
     if calc=='Mean':
         print('\nCalculating fit parameters as the mean of the simulation values.\n')
         sim_results = [np.mean(sim_data, axis=0), np.std(sim_data, axis=0)]
@@ -238,9 +196,9 @@ if lit_compare:
 
 
     Gmeas_U, Gmeas_W, Gmeas_I, alpham_U, alpham_W, alpham_I = sim_results[0]; sigGU, sigGW, sigGI, sigalpha, sigalphaW, sigalphaI = sim_results[1]
-    kappam_U = GtoKappa(Gmeas_U, A_U, L); sigkappam_U = GtoKappa(sigGU, A_U, L)   # pW / K / um; error analysis is correct because kappa(G) just depends on constants
-    kappam_W = GtoKappa(Gmeas_W, A_W, L); sigkappam_W = GtoKappa(sigGW, A_W, L)   # pW / K / um; error analysis is correct because kappa(G) just depends on constants
-    kappam_I = GtoKappa(Gmeas_I, A_I, L); sigkappam_I = GtoKappa(sigGI, A_I, L)   # pW / K / um; error analysis is correct because kappa(G) just depends on constants
+    kappam_U = GtoKappa(Gmeas_U, alpham_U, L); sigkappam_U = GtoKappa(sigGU, alpham_U, L)   # pW / K / um; error analysis is correct because kappa(G) just depends on constants
+    kappam_W = GtoKappa(Gmeas_W, alpham_W, L); sigkappam_W = GtoKappa(sigGW, alpham_W, L)   # pW / K / um; error analysis is correct because kappa(G) just depends on constants
+    kappam_I = GtoKappa(Gmeas_I, alpham_I, L); sigkappam_I = GtoKappa(sigGI, alpham_I, L)   # pW / K / um; error analysis is correct because kappa(G) just depends on constants
 
     ### Nb
     TD_Nb = 275   # K, Nb
@@ -511,8 +469,6 @@ if analyze_vlengthdata:
 
     title = 'Predictions for Bolotest Data, '   
     plot_modelvdata(sim_data, data, title=title+' $\\sigma_G$ = 2.4\\% G', plot_bolotest=True, layer_ds=layer_d0, pred_wfit=False)
-    # plot_modelvdata(simresults_mean, data, title=title+' Bolos 1a-f', vlength_data=vlength_data, plot_bolotest=False)
-    # plot_modelvdata(simresults_mean, data, title=title+' Bolos 1a-f, $\\beta=0.8$', vlength_data=vlength_data, plot_bolotest=False, Lscale=0.8)
 
 
 if manual_params:
@@ -521,7 +477,7 @@ if manual_params:
     sigma_params = np.array([0, 0, 0, 0, 0, 0])
     fit = np.array([params_manual_params, sigma_params])
     title = 'Hand-chosen fit parameters '   
-    data1b = np.array([ydata[0], sigma[0]]) if bolo1b else []  # plot bolo1b data?
+    data1b = np.array([ydata[0], sigma[0]]) if plot_bolo1b else []  # plot bolo1b data?
 
     results = qualityplots(data, params_manual_params, plot_dir=plot_dir, save_figs=save_figs, fn_comments=fn_comments, title=title, vmax=1E3, calc='Mean', qplim=qplim)
 
@@ -529,16 +485,6 @@ if manual_params:
     plot_modelvdata(fit, data, title=title+' L=220 um Bolos', plot_bolotest=True)
     plot_modelvdata(fit, data, title=title+' Bolos 1a-f and bolotest', vlength_data=vlength_data, plot_bolotest=False)
     plot_modelvdata(fit, data, title=title+' Bolos 1a-f and bolotest, $\\beta=0.8$', vlength_data=vlength_data, plot_bolotest=False, Lscale=0.8)
-
-
-    # testdd0 = np.linspace(0.01, 2)
-    # plt.figure()
-    # plt.plot(testdd0, testdd0**1, label='alpha=0')
-    # plt.plot(testdd0, testdd0**1.5, label='alpha=0.5')
-    # plt.plot(testdd0, testdd0**2, label='alpha=1')
-    # plt.plot(testdd0, testdd0**2.5, label='alpha=1.5')
-    # plt.legend()
-    # plt.xlabel('d/d0')
 
 
 if scrap:
