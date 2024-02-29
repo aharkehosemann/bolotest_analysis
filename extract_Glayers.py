@@ -34,11 +34,11 @@ import csv
 
 ### User Switches
 # analysis
-run_sim = True   # run MC simulation for fitting model
+run_sim = False   # run MC simulation for fitting model
 quality_plots = True   # results on G_x vs alpha_x parameter space for each layer
-pairwise_plots = True   # histogram and correlations of simulated fit parameters
-compare_modelanddata = True   # plot model predictions and bolotest data
-compare_legacy = True   # compare with NIST sub-mm bolo legacy data
+pairwise_plots = False   # histogram and correlations of simulated fit parameters
+compare_modelanddata = False   # plot model predictions and bolotest data
+compare_legacy = False   # compare with NIST sub-mm bolo legacy data
 lit_compare = False   # compare measured conductivities with values from literature
 design_implications = False   # NEP predictions from resulting model
 analyze_vlengthdata = False   # look at bolotest data vs length
@@ -46,10 +46,10 @@ manual_params = False   # pick parameters manually and compare data
 scrap = False
 
 # options
-model = 'three-layer'   # use constrained model results
+model = 'two-layer'   # two- or three-layer model?
 constrained = False   # use constrained model results
-n_its = int(1E3)   # number of iterations in MC simulation
-vmax = 1E3   # quality plot color bar scaling
+n_its = int(1E2)   # number of iterations in MC simulation
+vmax = 1E4   # quality plot color bar scaling
 calc = 'Median'   # how to evaluate fit parameters from simluation data - options are 'Mean' and 'Median'
 qplim = [-1,2]   # x- and y-axis limits for quality plot
 plot_bolo1b = True   # add bolo1 data to legacy prediction comparison plot
@@ -64,8 +64,8 @@ save_csv = True   # save csv file of results
 # where to save results
 analysis_dir = '/Users/angi/NIS/Bolotest_Analysis/'
 # fn_comments = '_postFIB_varyd'; alim = [-np.inf, np.inf]; sigmaG_frac = 0.; vary_thickness = True; # vary film thickness, layer-specific error bars
-fn_comments = '_postFIB_varyd_changesubd0to400nm'; alim = [-np.inf, np.inf]; sigmaG_frac = 0.; vary_thickness = True; # vary film thickness, layer-specific error bars
-# fn_comments = '_postFIB_twolayertest'; alim = [-np.inf, np.inf]; sigmaG_frac = 0.; vary_thickness = False; # vary film thickness, layer-specific error bars
+# fn_comments = '_postFIB_varyd_changesubd0to400nm'; alim = [-np.inf, np.inf]; sigmaG_frac = 0.; vary_thickness = True; # vary film thickness, layer-specific error bars
+fn_comments = '_twolayertest'; sigmaG_frac = 0.; vary_thickness = False; # vary film thickness, layer-specific error bars
 
 
 ### layer thicknesses
@@ -90,10 +90,14 @@ layer_d0 = np.array([dS_ABD, dS_CF, dS_E, dS_G, dW1_ABD,  dW1_E, dI1_ABC, dI_DF,
 derrs = np.array([dSABD_err, dSCF_err, dSE_err, dSG_err, dW1ABD_err,  dW1E_err, dI1ABC_err, dIDF_err, dW2AC_err, dW2BE_err, dI2AC_err])
 # derrs = np.ones_like(layer_d0)*0.0
 
-# initial guess for fitter
-p0_a0inf = np.array([0.7, 0.75, 1.2, 0.75, 0.1, 1.])   # U, W, I [pW/K], alpha_U, alpha_W, alpha_I [unitless]
-p0_a01 = np.array([0.5, 0.5, 1, 1., 1., 1.])   # U, W, I [pW/K], alpha_U, alpha_W, alpha_I [unitless]
-p0 = p0_a0inf
+# initial guess and bounds for fitter
+alim = [-1, 1] if constrained else [-np.inf, np.inf]   # limit alpha to [-1, 1] if constraining fit
+if model=='three-layer':
+    p0 = np.array([1., 0.75, 1., 0.5, 0., 1.])   # U, W, I [pW/K], alpha_U, alpha_W, alpha_I [unitless]
+    bounds = [(0, np.inf), (0, np.inf), (0, np.inf), (alim[0], alim[1]), (alim[0], alim[1]), (alim[0], alim[1])]   # bounds for 6 fit parameters: G_U, G_W, G_I, alpha_U, alpha_W, alpha_I
+elif model=='two-layer':
+    p0 = np.array([1, 0.5, 0.5, 0.5])   # U, W [pW/K], alpha_U, alpha_W [unitless]
+    bounds = [(0, np.inf), (0, np.inf), (alim[0], alim[1]), (alim[0], alim[1])]   # bounds for 4 fit parameters: G_U, G_W, G_I, alpha_U, alpha_W, alpha_I
 
 # choose GTES data 
 ydata_lessbling = np.array([13.95595194, 4.721712381, 7.89712938, 10.11727864, 17.22593561, 5.657104443, 15.94469664, 3.513915367])   # pW/K at 170 mK fitting for G explicitly, weighted average only on 7; bolo 1b, 24, 23, 22, 21, 20, 7*, 13 
@@ -102,7 +106,6 @@ ydata = ydata_lessbling; sigma = sigma_lessbling
 sigma_percentG = sigmaG_frac * ydata_lessbling
 
 bolos = np.array(['bolo 1b', 'bolo 24', 'bolo 23', 'bolo 22', 'bolo 21', 'bolo 20', 'bolo 7', 'bolo 13'])
-bounds = [(0, np.inf), (0, np.inf), (0, np.inf), (alim[0], alim[1]), (alim[0], alim[1]), (alim[0], alim[1])]   # bounds for 6 fit parameters: G_U, G_W, G_I, alpha_U, alpha_W, alpha_I
 plot_dir = analysis_dir + 'Plots/layer_extraction_analysis/'; sim_file = analysis_dir + 'Analysis_Files/sim' + fn_comments + '.pkl'; csv_file = analysis_dir + 'Analysis_Files/sim' + fn_comments + '_results.csv'
 data = [ydata, sigma] 
 
@@ -134,20 +137,26 @@ sim_data = sim_dict['sim']
 
 if quality_plots:   # plot G_x vs alpha_x parameter space with various fit results
     ### plot fit in 2D parameter space, take mean values of simulation
-    results_mean = qualityplots(data, sim_dict, plot_dir=plot_dir, save_figs=save_figs, fn_comments=fn_comments+'_mean', title=plot_title+'\\textbf{ (Mean)}', vmax=vmax, calc='Mean', qplim=qplim, layer_ds=layer_d0)
+    results_mean = qualityplots(data, sim_dict, plot_dir=plot_dir, save_figs=save_figs, fn_comments=fn_comments+'_mean', title=plot_title+'\\textbf{ (Mean)}', vmax=vmax, calc='Mean', qplim=qplim, layer_ds=layer_d0, model=model)
     params_mean, paramerrs_mean, kappas_mean, kappaerrs_mean, Gwire_mean, sigmaGwire_mean, chisq_mean = results_mean
 
     ### plot fit in 2D parameter space, take median values of simulation
-    results_med = qualityplots(data, sim_dict, plot_dir=plot_dir, save_figs=save_figs, fn_comments=fn_comments+'_median', title=plot_title+'\\textbf{ (Median)}', vmax=vmax, calc='Median', qplim=qplim, layer_ds=layer_d0)
+    results_med = qualityplots(data, sim_dict, plot_dir=plot_dir, save_figs=save_figs, fn_comments=fn_comments+'_median', title=plot_title+'\\textbf{ (Median)}', vmax=vmax, calc='Median', qplim=qplim, layer_ds=layer_d0, model=model)
     params_med, paramerrs_med, kappas_med, kappaerrs_med, Gwire_med, sigmaGwire_med, chisq_med = results_med
 
     if save_csv:   # save model results to CSV file
-        vals_mean = np.array([params_mean[0], params_mean[1], params_mean[2], params_mean[3], params_mean[4], params_mean[5], kappas_mean[0], kappas_mean[1], kappas_mean[2], Gwire_mean, chisq_mean])
-        vals_med = np.array([params_med[0], params_med[1], params_med[2], params_med[3], params_med[4], params_med[5], kappas_med[0], kappas_med[1], kappas_med[2], Gwire_med, chisq_med])
-        vals_err = np.array([paramerrs_mean[0], paramerrs_mean[1], paramerrs_mean[2], paramerrs_mean[3], paramerrs_mean[4], paramerrs_mean[5], kappaerrs_mean[0], kappaerrs_mean[1], kappaerrs_mean[2], sigmaGwire_mean, ''])   # should be the same for mean and median
-        
+        if model=='three-layer':
+            vals_mean = np.array([params_mean[0], params_mean[1], params_mean[2], params_mean[3], params_mean[4], params_mean[5], kappas_mean[0], kappas_mean[1], kappas_mean[2], Gwire_mean, chisq_mean])
+            vals_med = np.array([params_med[0], params_med[1], params_med[2], params_med[3], params_med[4], params_med[5], kappas_med[0], kappas_med[1], kappas_med[2], Gwire_med, chisq_med])
+            vals_err = np.array([paramerrs_mean[0], paramerrs_mean[1], paramerrs_mean[2], paramerrs_mean[3], paramerrs_mean[4], paramerrs_mean[5], kappaerrs_mean[0], kappaerrs_mean[1], kappaerrs_mean[2], sigmaGwire_mean, ''])   # should be the same for mean and median
+            csv_params = np.array(['GU (pW/K)', 'GW (pW/K)', 'GI (pW/K)', 'alphaU', 'alphaW', 'alphaI', 'kappaU (pW/K/um)', 'kappaW (pW/K/um)', 'kappaI (pW/K/um)', 'Gwire (pW/K)', 'Chi-sq val'])
+        elif model=='two-layer':
+            vals_mean = np.array([params_mean[0], params_mean[1], params_mean[2], params_mean[3], kappas_mean[0], kappas_mean[1], Gwire_mean, chisq_mean])
+            vals_med = np.array([params_med[0], params_med[1], params_med[2], params_med[3], kappas_med[0], kappas_med[1], Gwire_med, chisq_med])
+            vals_err = np.array([paramerrs_mean[0], paramerrs_mean[1], paramerrs_mean[2], paramerrs_mean[3], kappaerrs_mean[0], kappaerrs_mean[1], sigmaGwire_mean, ''])   # should be the same for mean and median
+            csv_params = np.array(['GU (pW/K)', 'GW (pW/K)', 'alphaU', 'alphaW', 'kappaU (pW/K/um)', 'kappaW (pW/K/um)', 'Gwire (pW/K)', 'Chi-sq val'])
+
         # write CSV     
-        csv_params = np.array(['GU (pW/K)', 'GW (pW/K)', 'GI (pW/K)', 'alphaU', 'alphaW', 'alphaI', 'kappaU (pW/K/um)', 'kappaW (pW/K/um)', 'kappaI (pW/K/um)', 'Gwire (pW/K)', 'Chi-sq val'])
         fields = np.array(['Parameter', 'Mean', 'Median', 'Error'])  
         rows = [[csv_params[rr], vals_mean[rr], vals_med[rr], vals_err[rr]] for rr in np.arange(len(csv_params))]
         with open(csv_file, 'w') as csvfile:  
