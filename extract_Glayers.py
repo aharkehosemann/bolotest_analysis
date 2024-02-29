@@ -21,6 +21,10 @@ added dS_E, dI1_ABCF -> dI_DF (now full I1-I2 stack), dI2_ACDF -> dI2_AC, added 
 changed the width of W in Leg E and Leg B I1, need to change Leg E substrate width
 
 2024/02/28 : added ability to bootstrap thicknesses within layer-specific error bars
+Adding two-layer functionality in which substrate and insulating nitride layers are treated as the same layer, and d0_U = 400 nm instead of 420 in three-layer model
+note: legacy geometry has not been changed, though these nitride layers may also be thinner than predicted?
+
+2024/02/29: changed substrate d0 from 420 nm to 400 nm for uniformity. Still in the middle of adding two-layer model. 
 
 TODO: two layer model where all nitride is treated the same?
 """
@@ -31,10 +35,10 @@ import csv
 ### User Switches
 # analysis
 run_sim = True   # run MC simulation for fitting model
-quality_plots = False   # results on G_x vs alpha_x parameter space for each layer
-pairwise_plots = False   # histogram and correlations of simulated fit parameters
-compare_modelanddata = False   # plot model predictions and bolotest data
-compare_legacy = False   # compare with NIST sub-mm bolo legacy data
+quality_plots = True   # results on G_x vs alpha_x parameter space for each layer
+pairwise_plots = True   # histogram and correlations of simulated fit parameters
+compare_modelanddata = True   # plot model predictions and bolotest data
+compare_legacy = True   # compare with NIST sub-mm bolo legacy data
 lit_compare = False   # compare measured conductivities with values from literature
 design_implications = False   # NEP predictions from resulting model
 analyze_vlengthdata = False   # look at bolotest data vs length
@@ -42,9 +46,15 @@ manual_params = False   # pick parameters manually and compare data
 scrap = False
 
 # options
-show_simGdata = False   # show simulated y-data plots during MC simulation
-calc_Gwire = False   # calculate G of the wiring stack if it wasn't saved during the simulation
+model = 'three-layer'   # use constrained model results
 constrained = False   # use constrained model results
+n_its = int(1E3)   # number of iterations in MC simulation
+vmax = 1E3   # quality plot color bar scaling
+calc = 'Median'   # how to evaluate fit parameters from simluation data - options are 'Mean' and 'Median'
+qplim = [-1,2]   # x- and y-axis limits for quality plot
+plot_bolo1b = True   # add bolo1 data to legacy prediction comparison plot
+show_simGdata = False   # show simulated y-data plots during MC simulation
+# calc_Gwire = False   # calculate G of the wiring stack if it wasn't saved during the simulation
 
 # save results
 save_figs = True   # save figures 
@@ -53,16 +63,13 @@ save_csv = True   # save csv file of results
 
 # where to save results
 analysis_dir = '/Users/angi/NIS/Bolotest_Analysis/'
-fn_comments = '_postFIB_varydtest'; alim = [-np.inf, np.inf]; sigmaG_frac = 0.; vary_thickness = True; # vary film thickness, layer-specific error bars
+# fn_comments = '_postFIB_varyd'; alim = [-np.inf, np.inf]; sigmaG_frac = 0.; vary_thickness = True; # vary film thickness, layer-specific error bars
+fn_comments = '_postFIB_varyd_changesubd0to400nm'; alim = [-np.inf, np.inf]; sigmaG_frac = 0.; vary_thickness = True; # vary film thickness, layer-specific error bars
+# fn_comments = '_postFIB_twolayertest'; alim = [-np.inf, np.inf]; sigmaG_frac = 0.; vary_thickness = False; # vary film thickness, layer-specific error bars
 
-n_its = int(1E3)   # number of iterations in MC simulation
-vmax = 1E3   # quality plot color bar scaling
-calc = 'Median'   # how to evaluate fit parameters from simluation data - options are 'Mean' and 'Median'
-qplim = [-1,2]   # x- and y-axis limits for quality plot
-plot_bolo1b = True   # add bolo1 data to legacy prediction comparison plot
 
 ### layer thicknesses
-# values; default from 2 rounds of FIB measurements: layer_ds = np.array([0.372, 0.312, 0.108, 0.321, 0.181, 0.162, 0.418, 0.298, 0.596, 0.354, 0.314, 0.302])
+# values; default from 2 rounds of FIB measurements: layer_ds = np.array([0.372, 0.312, 0.199, 0.181, 0.162, 0.418, 0.298, 0.596, 0.354, 0.314, 0.302])
 dS_ABD = 0.372; dS_CF = 0.312; dS_E1 = 0.108; dS_E2 = 0.321; dS_G = 0.181   # [um] substrate thickness for different legs, originally 420, 400, 420, 340, 0
 dW1_ABD = 0.162; dW1_E = 0.418   # [um] W1 thickness for different legs, originally 160, 100
 dI1_ABC = 0.298; dI_DF = 0.596   # [um] I1 thickness for different legs, originally 350, 270
@@ -118,7 +125,8 @@ plt.rcParams['ytick.major.size'] = 5; plt.rcParams['ytick.minor.visible'] = Fals
 
 ### Execute Analysis
 if run_sim:   # run simulation 
-    sim_dict = runsim_chisq(n_its, p0, data, bounds, plot_dir, show_simGdata=show_simGdata, save_figs=save_figs, save_sim=save_sim, sim_file=sim_file, fn_comments=fn_comments, vary_thickness=vary_thickness, derrs=derrs, layer_d0=layer_d0)  
+    sim_dict = runsim_chisq(n_its, p0, data, bounds, plot_dir, show_simGdata=show_simGdata, save_figs=save_figs, save_sim=save_sim, sim_file=sim_file, 
+                            fn_comments=fn_comments, calc=calc, vary_thickness=vary_thickness, derrs=derrs, layer_d0=layer_d0, model=model)  
 else:   # load simulation data
     with open(sim_file, 'rb') as infile:   # load simulation pkl
         sim_dict = pkl.load(infile)
