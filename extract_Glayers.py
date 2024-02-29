@@ -35,24 +35,24 @@ import csv
 ### User Switches
 # analysis
 run_sim = False   # run MC simulation for fitting model
-quality_plots = True   # results on G_x vs alpha_x parameter space for each layer
+quality_plots = False   # results on G_x vs alpha_x parameter space for each layer
 pairwise_plots = False   # histogram and correlations of simulated fit parameters
 compare_modelanddata = False   # plot model predictions and bolotest data
-compare_legacy = False   # compare with NIST sub-mm bolo legacy data
+compare_legacy = True   # compare with NIST sub-mm bolo legacy data
 lit_compare = False   # compare measured conductivities with values from literature
 design_implications = False   # NEP predictions from resulting model
-analyze_vlengthdata = False   # look at bolotest data vs length
+analyze_vlengthdata = False   # look at bolotest data vs leg length
 manual_params = False   # pick parameters manually and compare data
 scrap = False
 
 # options
 model = 'two-layer'   # two- or three-layer model?
 constrained = False   # use constrained model results
-n_its = int(1E2)   # number of iterations in MC simulation
+n_its = int(1E3)   # number of iterations in MC simulation
 vmax = 1E4   # quality plot color bar scaling
 calc = 'Median'   # how to evaluate fit parameters from simluation data - options are 'Mean' and 'Median'
 qplim = [-1,2]   # x- and y-axis limits for quality plot
-plot_bolo1b = True   # add bolo1 data to legacy prediction comparison plot
+plot_bolo1b = True   # add bolo1 data to legacy prediction comparison plot, might turn off for paper figures
 show_simGdata = False   # show simulated y-data plots during MC simulation
 # calc_Gwire = False   # calculate G of the wiring stack if it wasn't saved during the simulation
 
@@ -64,22 +64,23 @@ save_csv = True   # save csv file of results
 # where to save results
 analysis_dir = '/Users/angi/NIS/Bolotest_Analysis/'
 # fn_comments = '_postFIB_varyd'; alim = [-np.inf, np.inf]; sigmaG_frac = 0.; vary_thickness = True; # vary film thickness, layer-specific error bars
-# fn_comments = '_postFIB_varyd_changesubd0to400nm'; alim = [-np.inf, np.inf]; sigmaG_frac = 0.; vary_thickness = True; # vary film thickness, layer-specific error bars
-fn_comments = '_twolayertest'; sigmaG_frac = 0.; vary_thickness = False; # vary film thickness, layer-specific error bars
+# fn_comments = '_postFIB_varyd_changesubd0to400nm'; vary_thickness = True; # vary film thickness, layer-specific error bars
+# fn_comments = '_postFIB_varyd_originald0s'; vary_thickness = False; # don't vary film thickness, original d estimates
+fn_comments = '_twolayermodel'; vary_thickness = False; # vary film thickness, layer-specific error bars
+# fn_comments = '_twolayermodel_varythickness'; vary_thickness = True; # vary film thickness, layer-specific error bars
+# sigmaG_frac = 0.; 
 
-
-### layer thicknesses
-# values; default from 2 rounds of FIB measurements: layer_ds = np.array([0.372, 0.312, 0.199, 0.181, 0.162, 0.418, 0.298, 0.596, 0.354, 0.314, 0.302])
-dS_ABD = 0.372; dS_CF = 0.312; dS_E1 = 0.108; dS_E2 = 0.321; dS_G = 0.181   # [um] substrate thickness for different legs, originally 420, 400, 420, 340, 0
-dW1_ABD = 0.162; dW1_E = 0.418   # [um] W1 thickness for different legs, originally 160, 100
-dI1_ABC = 0.298; dI_DF = 0.596   # [um] I1 thickness for different legs, originally 350, 270
-# dI1_ABC = 0.258; dI_DF = 0.610   # [um] I1 thickness for different legs, originally 350, 270
+### layer thicknesses values; default from 2 rounds of FIB measurements: layer_ds = np.array([0.372, 0.312, 0.199, 0.181, 0.162, 0.418, 0.298, 0.596, 0.354, 0.314, 0.302])
+dS_ABD = 0.372; dS_CF = 0.312; dS_E1 = 0.108; dS_E2 = 0.321; dS_G = 0.181   # [um] substrate thickness for different legs, originally 420, 400, 420, 420, 340
+dW1_ABD = 0.162; dW1_E = 0.418   # [um] W1 thickness for different legs, originally 160, 100+285
+dI1_ABC = 0.298; dI_DF = 0.596   # [um] I1 thickness for different legs, originally 350, 270+400
+# dI1_ABC = 0.258; dI_DF = 0.610   # [um] I1 thickness for different legs, originally 350, 270+400
 dW2_AC = 0.354; dW2_BE = 0.314   # [um] W2 thickness for different legs, originally 340, 285
 dI2_AC = 0.302   # [um] I2 thickness, originally 400
 # dI2_AC = 0.252   # [um] I2 thickness, originally 400
 
 # error bars
-dSABD_err = 0.032; dSCF_err = 0.012; dSE1_err = 0.052; dSE2_err = 0.024; dSG_err = 0.048   # [um] substrate thickness error bars, originally 420, 400, 420, 340, 0 nm
+dSABD_err = 0.032; dSCF_err = 0.012; dSE1_err = 0.052; dSE2_err = 0.024; dSG_err = 0.048   # [um] substrate thickness error bars
 dW1ABD_err = 0.008; dW1E_err = 0.00   # [um] W1 thickness error bars, originally 160, 100 nm
 dI1ABC_err = 0.040; dIDF_err = 0.018   # [um] I1 thickness error bars, originally 350, 270 nm
 dW2AC_err = 0.013; dW2BE_err = 0.012   # [um] W2 thickness error bars, originally 340, 285 nm
@@ -88,7 +89,7 @@ dI2AC_err = 0.047   # [um] I2 thickness, originally 400
 dS_E = (4*dS_E1 + 3*dS_E2)/7; dSE_err = (4*dSE1_err + 3*dSE2_err)/7  # width-weighted thickness, S layer with step in height
 layer_d0 = np.array([dS_ABD, dS_CF, dS_E, dS_G, dW1_ABD,  dW1_E, dI1_ABC, dI_DF, dW2_AC, dW2_BE, dI2_AC])
 derrs = np.array([dSABD_err, dSCF_err, dSE_err, dSG_err, dW1ABD_err,  dW1E_err, dI1ABC_err, dIDF_err, dW2AC_err, dW2BE_err, dI2AC_err])
-# derrs = np.ones_like(layer_d0)*0.0
+if vary_thickness==False: derrs = np.zeros_like(layer_d0)  # turn off errors if not varying thickness (shouldn't matter but for good measure)
 
 # initial guess and bounds for fitter
 alim = [-1, 1] if constrained else [-np.inf, np.inf]   # limit alpha to [-1, 1] if constraining fit
@@ -99,11 +100,11 @@ elif model=='two-layer':
     p0 = np.array([1, 0.5, 0.5, 0.5])   # U, W [pW/K], alpha_U, alpha_W [unitless]
     bounds = [(0, np.inf), (0, np.inf), (alim[0], alim[1]), (alim[0], alim[1])]   # bounds for 4 fit parameters: G_U, G_W, G_I, alpha_U, alpha_W, alpha_I
 
-# choose GTES data 
+# G_TES data 
 ydata_lessbling = np.array([13.95595194, 4.721712381, 7.89712938, 10.11727864, 17.22593561, 5.657104443, 15.94469664, 3.513915367])   # pW/K at 170 mK fitting for G explicitly, weighted average only on 7; bolo 1b, 24, 23, 22, 21, 20, 7*, 13 
 sigma_lessbling = np.array([0.073477411, 0.034530085, 0.036798694, 0.04186006, 0.09953389, 0.015188074, 0.083450365, 0.01762426])
 ydata = ydata_lessbling; sigma = sigma_lessbling
-sigma_percentG = sigmaG_frac * ydata_lessbling
+# sigma_percentG = sigmaG_frac * ydata_lessbling
 
 bolos = np.array(['bolo 1b', 'bolo 24', 'bolo 23', 'bolo 22', 'bolo 21', 'bolo 20', 'bolo 7', 'bolo 13'])
 plot_dir = analysis_dir + 'Plots/layer_extraction_analysis/'; sim_file = analysis_dir + 'Analysis_Files/sim' + fn_comments + '.pkl'; csv_file = analysis_dir + 'Analysis_Files/sim' + fn_comments + '_results.csv'
@@ -173,7 +174,8 @@ if pairwise_plots:   ### pairwise correlation plots
 if compare_modelanddata:
 
     title = plot_title+'$\\textbf{ Predictions}$'   
-    plot_modelvdata(sim_data, data, title=title+'$\\textbf{ ('+calc+')}$', layer_ds=layer_d0, pred_wfit=False, calc=calc, save_figs=save_figs, plot_comments=fn_comments+'_'+calc, plot_dir=plot_dir)
+    plot_modelvdata(sim_data, data, title=title+'$\\textbf{ ('+calc+')}$', layer_ds=layer_d0, pred_wfit=False, calc=calc, model=model, 
+                    save_figs=save_figs, plot_comments=fn_comments+'_'+calc, plot_dir=plot_dir)
 
 
 if compare_legacy:   # compare G predictions with NIST legacy data
@@ -186,8 +188,8 @@ if compare_legacy:   # compare G predictions with NIST legacy data
     data1b = np.array([ydata[0], sigma[0]]) if plot_bolo1b else []  # plot bolo1b data?
 
     # compare with legacy data
-    predict_Glegacy(sim_data, data1b=data1b, pred_wfit=False, calc=calc, save_figs=save_figs, title=title+'$\\textbf{ ('+calc+')}$', plot_comments=fn_comments+'_'+calc, fs=(7,7))
-    predict_Glegacy(sim_data, data1b=data1b, pred_wfit=False, calc='Median', save_figs=save_figs, title=title+'$\\textbf{ (Median), }\\mathbf{\\beta=0.8}$', plot_comments=fn_comments+'_median_beta0p8', fs=(7,7), Lscale=0.8)
+    predict_Glegacy(sim_data, data1b=data1b, pred_wfit=False, calc=calc, save_figs=save_figs, title=title+'$\\textbf{ ('+calc+')}$', plot_comments=fn_comments+'_'+calc, fs=(7,7), model=model)
+    predict_Glegacy(sim_data, data1b=data1b, pred_wfit=False, calc='Median', save_figs=save_figs, title=title+'$\\textbf{ (Median), }\\mathbf{\\beta=0.8}$', plot_comments=fn_comments+'_median_beta0p8', fs=(7,7), Lscale=0.8, model=model)
     # predict_Glegacy(sim_data, data1b=data1b, pred_wfit=False, calc='Mean', save_figs=save_figs, title=title+'$\\textbf{ (Mean)}$', plot_comments=fn_comments+'_mean', fs=(7,7))
     # predict_Glegacy(sim_data, data1b=data1b, pred_wfit=False, calc='Mean', save_figs=save_figs, title=title+'$\\textbf{ (Mean), }\\mathbf{\\beta=0.8}$', plot_comments=fn_comments+'_mean_beta0p8', fs=(7,7), Lscale=0.8)
     
