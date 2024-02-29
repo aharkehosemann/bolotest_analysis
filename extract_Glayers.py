@@ -32,8 +32,8 @@ import csv
 # analysis
 run_sim = True   # run MC simulation for fitting model
 quality_plots = False   # results on G_x vs alpha_x parameter space for each layer
-pairwise_plots = True   # histogram and correlations of simulated fit parameters
-compare_modelanddata = True   # plot model predictions and bolotest data
+pairwise_plots = False   # histogram and correlations of simulated fit parameters
+compare_modelanddata = False   # plot model predictions and bolotest data
 compare_legacy = False   # compare with NIST sub-mm bolo legacy data
 lit_compare = False   # compare measured conductivities with values from literature
 design_implications = False   # NEP predictions from resulting model
@@ -62,7 +62,7 @@ qplim = [-1,2]   # x- and y-axis limits for quality plot
 plot_bolo1b = True   # add bolo1 data to legacy prediction comparison plot
 
 ### layer thicknesses
-# values
+# values; default from 2 rounds of FIB measurements: layer_ds = np.array([0.372, 0.312, 0.108, 0.321, 0.181, 0.162, 0.418, 0.298, 0.596, 0.354, 0.314, 0.302])
 dS_ABD = 0.372; dS_CF = 0.312; dS_E1 = 0.108; dS_E2 = 0.321; dS_G = 0.181   # [um] substrate thickness for different legs, originally 420, 400, 420, 340, 0
 dW1_ABD = 0.162; dW1_E = 0.418   # [um] W1 thickness for different legs, originally 160, 100
 dI1_ABC = 0.298; dI_DF = 0.596   # [um] I1 thickness for different legs, originally 350, 270
@@ -323,7 +323,7 @@ if lit_compare:
     plt.xscale('log')
     plt.legend()
 
-
+    f = 1.   # total specular scattering
     mfpI_eff = l_eff(7, .4, f)   # um; reflection limited phonon mfp including spectral scattering (if f<1)
     gamma = mfpI_eff/mfpI_Wyb   # should be 1 if f=1 (Casimir limit)
 
