@@ -10,23 +10,17 @@ aharkehosemann@gmail.com
 
 UPDATES :
 
-2023/11/14 : W2 etches SiN faster than previously thought. I1 in I1-I2 stack could be 213nm-312nm (large error bars here), bare S could be as small as 100 nm.
-Actually, this is only true for one nitride. Data says PECVD (I) etches much faster, but I think there was a bookkeeping error and LPCVD (S) etches faster.
-This would agree with the other trends and expectation that PECVD will etch slower since it's denser. 
-This would mean leg C S = 315-380 nm, bare S = 186-254 nm, leg D I1 = 332 - 344 nm
-
-2024/02/15 : Two FIB measurements gave updated thickness measurements and differentiated some layers that we used to treat as the same. Also, some layers are etched to the
-width of the layer above when I layers are removed, e.g., I1 is 3 um on Leg B where I2 is removed.
-added dS_E, dI1_ABCF -> dI_DF (now full I1-I2 stack), dI2_ACDF -> dI2_AC, added dW2_BE (= d_W1W2), dW2_BE -> dW2_B
-changed the width of W in Leg E and Leg B I1, need to change Leg E substrate width
-
 2024/02/28 : added ability to bootstrap thicknesses within layer-specific error bars
 Adding two-layer functionality in which substrate and insulating nitride layers are treated as the same layer, and d0_U = 400 nm instead of 420 in three-layer model
 note: legacy geometry has not been changed, though these nitride layers may also be thinner than predicted?
 
-2024/02/29: changed substrate d0 from 420 nm to 400 nm for uniformity. Still in the middle of adding two-layer model. 
+2024/02/29 : changed substrate d0 from 420 nm to 400 nm for uniformity. Still in the middle of adding two-layer model. 
 
-TODO: two layer model where all nitride is treated the same?
+2024/03/06 : added G suppression of legs B, E, and G substrates due to surface roughness. 5% suppression seems to be a better fit than 10%.  
+
+
+TODO: two layer model where all nitride is treated the same?, revisit error bars on layer widths, add error of d in chi-sq calc?, 
+handle highly variable texture, joel is interested in legacy predictions with fixed normalized residuals
 """
 from bolotest_routines import *
 from scipy.optimize import fsolve
@@ -36,8 +30,8 @@ import csv
 # analysis
 run_sim = False   # run MC simulation for fitting model
 quality_plots = False   # results on G_x vs alpha_x parameter space for each layer
-pairwise_plots = False   # histogram and correlations of simulated fit parameters
-compare_modelanddata = False   # plot model predictions and bolotest data
+pairwise_plots = True   # histogram and correlations of simulated fit parameters
+compare_modelanddata = True   # plot model predictions and bolotest data
 compare_legacy = True   # compare with NIST sub-mm bolo legacy data
 lit_compare = False   # compare measured conductivities with values from literature
 design_implications = False   # NEP predictions from resulting model
@@ -46,7 +40,7 @@ manual_params = False   # pick parameters manually and compare data
 scrap = False
 
 # options
-model = 'two-layer'   # two- or three-layer model?
+model = 'three-layer'   # two- or three-layer model?
 constrained = False   # use constrained model results
 n_its = int(1E3)   # number of iterations in MC simulation
 vmax = 1E4   # quality plot color bar scaling
@@ -54,7 +48,6 @@ calc = 'Median'   # how to evaluate fit parameters from simluation data - option
 qplim = [-1,2]   # x- and y-axis limits for quality plot
 plot_bolo1b = True   # add bolo1 data to legacy prediction comparison plot, might turn off for paper figures
 show_simGdata = False   # show simulated y-data plots during MC simulation
-# calc_Gwire = False   # calculate G of the wiring stack if it wasn't saved during the simulation
 
 # save results
 save_figs = True   # save figures 
@@ -63,15 +56,23 @@ save_csv = True   # save csv file of results
 
 # where to save results
 analysis_dir = '/Users/angi/NIS/Bolotest_Analysis/'
-# fn_comments = '_postFIB_varyd'; alim = [-np.inf, np.inf]; sigmaG_frac = 0.; vary_thickness = True; # vary film thickness, layer-specific error bars
-# fn_comments = '_postFIB_varyd_changesubd0to400nm'; vary_thickness = True; # vary film thickness, layer-specific error bars
+# fn_comments = '_postFIB_varyd'; vary_thickness = True; # vary film thickness, layer-specific error bars
 # fn_comments = '_postFIB_varyd_originald0s'; vary_thickness = False; # don't vary film thickness, original d estimates
-fn_comments = '_twolayermodel'; vary_thickness = False; # vary film thickness, layer-specific error bars
+# fn_comments = '_postFIB_originald0s'; vary_thickness = False; # don't vary film thickness, original d estimates
+# fn_comments = '_twolayermodel'; vary_thickness = False; # vary film thickness, layer-specific error bars
 # fn_comments = '_twolayermodel_varythickness'; vary_thickness = True; # vary film thickness, layer-specific error bars
+# fn_comments = '_twolayermodel_varythickness_suppressGU'; vary_thickness = True; # vary film thickness, suppress G of roughened substrate layers
+# fn_comments = '_threelayermodel_varythickness_suppressGU'; vary_thickness = True; # vary film thickness, suppress G of roughened substrate layers
+# fn_comments = '_threelayermodel_varythickness_increasedU150nm'; vary_thickness = True; # vary film thickness, add extra material to leg B
+# fn_comments = '_twolayermodel_varythickness_increasedU150nm'; vary_thickness = True; # vary film thickness, add extra material to leg B
+# fn_comments = '_twolayermodel_varythickness_increasedU150nm_G0unconstrained'; vary_thickness = True; # vary film thickness, add extra material to leg B, allow -G0
+# fn_comments = '_threelayermodel_varythickness_suppresstrenched10pc'; vary_thickness = True; # vary film thickness, treat substrate on legs B, E, and G as trenched
+fn_comments = '_threelayermodel_varythickness_suppresstrenched_5pc'; vary_thickness = True; # vary film thickness, treat substrate on legs B, E, and G as trenched
 # sigmaG_frac = 0.; 
 
 ### layer thicknesses values; default from 2 rounds of FIB measurements: layer_ds = np.array([0.372, 0.312, 0.199, 0.181, 0.162, 0.418, 0.298, 0.596, 0.354, 0.314, 0.302])
-dS_ABD = 0.372; dS_CF = 0.312; dS_E1 = 0.108; dS_E2 = 0.321; dS_G = 0.181   # [um] substrate thickness for different legs, originally 420, 400, 420, 420, 340
+# dS_ABD = 0.372; dS_CF = 0.312; dS_E1 = 0.108; dS_E2 = 0.321; dS_G = 0.181   # [um] substrate thickness for different legs, originally 420, 400, 420, 420, 340
+dS_ABD = 0.384; dS_CF = 0.321; dS_E1 = 0.164; dS_E2 = 0.345; dS_G = 0.235   # [um] substrate thickness for different legs, originally 420, 400, 420, 420, 340
 dW1_ABD = 0.162; dW1_E = 0.418   # [um] W1 thickness for different legs, originally 160, 100+285
 dI1_ABC = 0.298; dI_DF = 0.596   # [um] I1 thickness for different legs, originally 350, 270+400
 # dI1_ABC = 0.258; dI_DF = 0.610   # [um] I1 thickness for different legs, originally 350, 270+400
@@ -79,8 +80,16 @@ dW2_AC = 0.354; dW2_BE = 0.314   # [um] W2 thickness for different legs, origina
 dI2_AC = 0.302   # [um] I2 thickness, originally 400
 # dI2_AC = 0.252   # [um] I2 thickness, originally 400
 
+# ### layer thicknesses values; default from 2 rounds of FIB measurements: layer_ds = np.array([0.372, 0.312, 0.199, 0.181, 0.162, 0.418, 0.298, 0.596, 0.354, 0.314, 0.302])
+# dS_ABD = 0.420; dS_CF = 0.400; dS_E1 = 0.420; dS_E2 = 0.420; dS_G = 0.340   # [um] substrate thickness for different legs, originally 420, 400, 420, 420, 340
+# dW1_ABD = 0.160; dW1_E = 0.385   # [um] W1 thickness for different legs, originally 160, 100+285
+# dI1_ABC = 0.350; dI_DF = 0.670   # [um] I1 thickness for different legs, originally 350, 270+400
+# dW2_AC = 0.340; dW2_BE = 0.285   # [um] W2 thickness for different legs, originally 340, 285
+# dI2_AC = 0.400   # [um] I2 thickness, originally 400
+
 # error bars
-dSABD_err = 0.032; dSCF_err = 0.012; dSE1_err = 0.052; dSE2_err = 0.024; dSG_err = 0.048   # [um] substrate thickness error bars
+# dSABD_err = 0.032; dSCF_err = 0.012; dSE1_err = 0.052; dSE2_err = 0.024; dSG_err = 0.048   # [um] substrate thickness error bars
+dSABD_err = 0.016; dSCF_err = 0.012; dSE1_err = 0.052; dSE2_err = 0.024; dSG_err = 0.048   # [um] substrate thickness error bars
 dW1ABD_err = 0.008; dW1E_err = 0.00   # [um] W1 thickness error bars, originally 160, 100 nm
 dI1ABC_err = 0.040; dIDF_err = 0.018   # [um] I1 thickness error bars, originally 350, 270 nm
 dW2AC_err = 0.013; dW2BE_err = 0.012   # [um] W2 thickness error bars, originally 340, 285 nm
@@ -95,10 +104,12 @@ if vary_thickness==False: derrs = np.zeros_like(layer_d0)  # turn off errors if 
 alim = [-1, 1] if constrained else [-np.inf, np.inf]   # limit alpha to [-1, 1] if constraining fit
 if model=='three-layer':
     p0 = np.array([1., 0.75, 1., 0.5, 0., 1.])   # U, W, I [pW/K], alpha_U, alpha_W, alpha_I [unitless]
-    bounds = [(0, np.inf), (0, np.inf), (0, np.inf), (alim[0], alim[1]), (alim[0], alim[1]), (alim[0], alim[1])]   # bounds for 6 fit parameters: G_U, G_W, G_I, alpha_U, alpha_W, alpha_I
+    # bounds = [(0, np.inf), (0, np.inf), (0, np.inf), (alim[0], alim[1]), (alim[0], alim[1]), (alim[0], alim[1])]   # bounds for 6 fit parameters: G_U, G_W, G_I, alpha_U, alpha_W, alpha_I
+    bounds = [(-np.inf, np.inf), (-np.inf, np.inf), (-np.inf, np.inf), (alim[0], alim[1]), (alim[0], alim[1]), (alim[0], alim[1])]   # bounds for 6 fit parameters: G_U, G_W, G_I, alpha_U, alpha_W, alpha_I
 elif model=='two-layer':
     p0 = np.array([1, 0.5, 0.5, 0.5])   # U, W [pW/K], alpha_U, alpha_W [unitless]
-    bounds = [(0, np.inf), (0, np.inf), (alim[0], alim[1]), (alim[0], alim[1])]   # bounds for 4 fit parameters: G_U, G_W, G_I, alpha_U, alpha_W, alpha_I
+    # bounds = [(0, np.inf), (0, np.inf), (alim[0], alim[1]), (alim[0], alim[1])]   # bounds for 4 fit parameters: G_U, G_W, G_I, alpha_U, alpha_W, alpha_I
+    bounds = [(-np.inf, np.inf), (-np.inf, np.inf), (alim[0], alim[1]), (alim[0], alim[1])]   # bounds for 4 fit parameters: G_U, G_W, G_I, alpha_U, alpha_W, alpha_I
 
 # G_TES data 
 ydata_lessbling = np.array([13.95595194, 4.721712381, 7.89712938, 10.11727864, 17.22593561, 5.657104443, 15.94469664, 3.513915367])   # pW/K at 170 mK fitting for G explicitly, weighted average only on 7; bolo 1b, 24, 23, 22, 21, 20, 7*, 13 
@@ -118,7 +129,10 @@ llvl_all = np.append(ll_vl, ll_vl); ydatavl_all = np.append(ydatavl_lb, ydatavl_
 vlength_data = np.stack([ydatavl_all, sigmavl_all, llvl_all*1E3])
 
 # for plotting
-param_labels = ['G$_U$', 'G$_W$', 'G$_I$', '$\\alpha_U$', '$\\alpha_W$', '$\\alpha_I$']  
+if model=='three-layer':
+    param_labels = ['G$_U$', 'G$_W$', 'G$_I$', '$\\alpha_U$', '$\\alpha_W$', '$\\alpha_I$']  
+elif model=='two-layer':
+    param_labels = ['G$_U$', 'G$_W$', '$\\alpha_U$', '$\\alpha_W$']  
 a0str = '(-\infty' if np.isinf(alim[0]) else '['+str(alim[0]); a1str = '\infty)' if np.isinf(alim[1]) else str(alim[1])+']'
 plot_title = '$\\boldsymbol{\\mathbf{\\alpha \in '+a0str+','+a1str+'}}$'   
 
