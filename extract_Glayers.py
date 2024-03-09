@@ -17,10 +17,19 @@ note: legacy geometry has not been changed, though these nitride layers may also
 2024/02/29 : changed substrate d0 from 420 nm to 400 nm for uniformity. Still in the middle of adding two-layer model. 
 
 2024/03/06 : added G suppression of legs B, E, and G substrates due to surface roughness. 5% suppression seems to be a better fit than 10%.  
+Revisited dS values from FIB, excluding measurements that may have been shortened due to charging up, and only considering on-membrane measurements. 
+dS errors are typically smaller, all ~12 nm.
 
+2024/03/08 : changes to note: 
+getting sigma_Gdata from spread in simulated predicted values gives chi-squared ~1.6. this is a lower limit because it isn't independent of the error in the model
+excluded jan FIB measurements because the sample was tilted
+treated trenched layers by suppressing G 10-20%, weighted by the width of the texturized area
+adding 30 nm to leg C dI1 seems to do good things?
 
-TODO: two layer model where all nitride is treated the same?, revisit error bars on layer widths, add error of d in chi-sq calc?, 
-handle highly variable texture, joel is interested in legacy predictions with fixed normalized residuals
+try: enlarging data error bars on smaller G bolos
+revisit 2 layer with updated thicknesses
+
+TODO: revisit error bars on layer widths, add error of d in chi-sq calc?, handle highly variable texture, joel is interested in legacy predictions with fixed normalized residuals
 """
 from bolotest_routines import *
 from scipy.optimize import fsolve
@@ -28,7 +37,7 @@ import csv
 
 ### User Switches
 # analysis
-run_sim = False   # run MC simulation for fitting model
+run_sim = True   # run MC simulation for fitting model
 quality_plots = False   # results on G_x vs alpha_x parameter space for each layer
 pairwise_plots = True   # histogram and correlations of simulated fit parameters
 compare_modelanddata = True   # plot model predictions and bolotest data
@@ -40,9 +49,11 @@ manual_params = False   # pick parameters manually and compare data
 scrap = False
 
 # options
-model = 'three-layer'   # two- or three-layer model?
+model = 'Three-Layer'   # two- or three-layer model?
 constrained = False   # use constrained model results
-n_its = int(1E3)   # number of iterations in MC simulation
+n_its = int(1E1)   # number of iterations in MC simulation
+sigma_fromsim = False   # calculate data point error bars from simulated Gtotals
+sigma_fromsigd = False   # calculate max sigma_data from sigma_d's assuming alpha=1
 vmax = 1E4   # quality plot color bar scaling
 calc = 'Median'   # how to evaluate fit parameters from simluation data - options are 'Mean' and 'Median'
 qplim = [-1,2]   # x- and y-axis limits for quality plot
@@ -56,6 +67,7 @@ save_csv = True   # save csv file of results
 
 # where to save results
 analysis_dir = '/Users/angi/NIS/Bolotest_Analysis/'
+fn_comments = '_test'; vary_thickness = True; # vary film thickness, layer-specific error bars
 # fn_comments = '_postFIB_varyd'; vary_thickness = True; # vary film thickness, layer-specific error bars
 # fn_comments = '_postFIB_varyd_originald0s'; vary_thickness = False; # don't vary film thickness, original d estimates
 # fn_comments = '_postFIB_originald0s'; vary_thickness = False; # don't vary film thickness, original d estimates
@@ -67,49 +79,56 @@ analysis_dir = '/Users/angi/NIS/Bolotest_Analysis/'
 # fn_comments = '_twolayermodel_varythickness_increasedU150nm'; vary_thickness = True; # vary film thickness, add extra material to leg B
 # fn_comments = '_twolayermodel_varythickness_increasedU150nm_G0unconstrained'; vary_thickness = True; # vary film thickness, add extra material to leg B, allow -G0
 # fn_comments = '_threelayermodel_varythickness_suppresstrenched10pc'; vary_thickness = True; # vary film thickness, treat substrate on legs B, E, and G as trenched
-fn_comments = '_threelayermodel_varythickness_suppresstrenched_5pc'; vary_thickness = True; # vary film thickness, treat substrate on legs B, E, and G as trenched
-# sigmaG_frac = 0.; 
+# fn_comments = '_threelayermodel_varythickness_suppresstrenched_5pc'; vary_thickness = True; # vary film thickness, treat substrate on legs B, E, and G as trenched
+# fn_comments = '_twolayermodel_suppressGtrenched_5pc'; vary_thickness = True; # vary film thickness, treat substrate on legs B, E, and G as trenched
+# fn_comments = '_twolayermodel_suppressGtrenched_5pc'; vary_thickness = True; # vary film thickness, treat substrate on legs B, E, and G as trenched
+# fn_comments = '_threelayermodel_suppressandrevisitdS'; vary_thickness = True; # vary film thickness, revisited thickness and error bars on S layers
+# fn_comments = '_threelayermodel_suppressandrevisitdSanddI'; vary_thickness = True; # vary film thickness, revisited thickness and error bars on S and I layers
+# fn_comments = '_threelayermodel_onlyfebFIBmsmts'; vary_thickness = True; # vary film thickness, revisited thickness and error bars on S and I layers
+# fn_comments = '_threelayermodel_increaselegCdI130nn'; vary_thickness = True; # vary film thickness, revisited thickness and error bars on S and I layers
 
 ### layer thicknesses values; default from 2 rounds of FIB measurements: layer_ds = np.array([0.372, 0.312, 0.199, 0.181, 0.162, 0.418, 0.298, 0.596, 0.354, 0.314, 0.302])
 # dS_ABD = 0.372; dS_CF = 0.312; dS_E1 = 0.108; dS_E2 = 0.321; dS_G = 0.181   # [um] substrate thickness for different legs, originally 420, 400, 420, 420, 340
-dS_ABD = 0.384; dS_CF = 0.321; dS_E1 = 0.164; dS_E2 = 0.345; dS_G = 0.235   # [um] substrate thickness for different legs, originally 420, 400, 420, 420, 340
-dW1_ABD = 0.162; dW1_E = 0.418   # [um] W1 thickness for different legs, originally 160, 100+285
-dI1_ABC = 0.298; dI_DF = 0.596   # [um] I1 thickness for different legs, originally 350, 270+400
+# dS_ABD = 0.384; dS_CF = 0.321; dS_E1 = 0.164; dS_E2 = 0.345; dS_E3 = 0.313; dS_G = 0.235   # [um] substrate thickness for different legs, originally 420, 400, 420, 420, 420, 340
+dS_ABD = 0.386; dS_CF = 0.312; dS_E = 0.280; dS_G = 0.235   # [um] substrate thickness for different legs, originally 420, 400, 420, 340
+dSABD_err = 0.017; dSCF_err = 0.013; dSE_err = 0.04*dS_E; dSG_err = 0.04*dS_G   # [um] substrate thickness error bars
+
+dW1_ABD = 0.167; dW1_E = 0.418   # [um] W1 thickness for different legs, originally 160, 100+285
+dW1ABD_err = 0.007; dW1E_err = 0.04*dW1_E   # [um] W1 thickness error bars, originally 160, 100 nm
+# dI1_ABC = 0.298; dI_DF = 0.596   # [um] I1 thickness for different legs, originally 350, 270+400
+dI1_ABC = 0.305; dI_DF = 0.604   # [um] I1 thickness for different legs, originally 350, 270+400
+dI1ABC_err = 0.027; dIDF_err = 0.014   # [um] I1 thickness error bars, originally 350, 270 nm
 # dI1_ABC = 0.258; dI_DF = 0.610   # [um] I1 thickness for different legs, originally 350, 270+400
-dW2_AC = 0.354; dW2_BE = 0.314   # [um] W2 thickness for different legs, originally 340, 285
-dI2_AC = 0.302   # [um] I2 thickness, originally 400
+dW2_AC = 0.358; dW2_BE = 0.317   # [um] W2 thickness for different legs, originally 340, 285
+dW2AC_err = 0.003; dW2BE_err = 0.04*dW2_BE   # [um] W2 thickness error bars, originally 340, 285 nm
+# dI2_AC = 0.304   # [um] I2 thickness, originally 400
+dI2_AC = 0.298   # [um] I2 thickness, originally 400
+dI2AC_err = 0.026   # [um] I2 
 # dI2_AC = 0.252   # [um] I2 thickness, originally 400
 
 # ### layer thicknesses values; default from 2 rounds of FIB measurements: layer_ds = np.array([0.372, 0.312, 0.199, 0.181, 0.162, 0.418, 0.298, 0.596, 0.354, 0.314, 0.302])
-# dS_ABD = 0.420; dS_CF = 0.400; dS_E1 = 0.420; dS_E2 = 0.420; dS_G = 0.340   # [um] substrate thickness for different legs, originally 420, 400, 420, 420, 340
+# dS_ABD = 0.420; dS_CF = 0.400; dS_E1 = 0.420; dS_E2 = 0.420; dS_G = 0.340   # [um] substrate thickness for different legs, originally 420, 400, 420, 420, 340; step in d on leg E 
 # dW1_ABD = 0.160; dW1_E = 0.385   # [um] W1 thickness for different legs, originally 160, 100+285
 # dI1_ABC = 0.350; dI_DF = 0.670   # [um] I1 thickness for different legs, originally 350, 270+400
 # dW2_AC = 0.340; dW2_BE = 0.285   # [um] W2 thickness for different legs, originally 340, 285
 # dI2_AC = 0.400   # [um] I2 thickness, originally 400
 
-# error bars
-# dSABD_err = 0.032; dSCF_err = 0.012; dSE1_err = 0.052; dSE2_err = 0.024; dSG_err = 0.048   # [um] substrate thickness error bars
-dSABD_err = 0.016; dSCF_err = 0.012; dSE1_err = 0.052; dSE2_err = 0.024; dSG_err = 0.048   # [um] substrate thickness error bars
-dW1ABD_err = 0.008; dW1E_err = 0.00   # [um] W1 thickness error bars, originally 160, 100 nm
-dI1ABC_err = 0.040; dIDF_err = 0.018   # [um] I1 thickness error bars, originally 350, 270 nm
-dW2AC_err = 0.013; dW2BE_err = 0.012   # [um] W2 thickness error bars, originally 340, 285 nm
-dI2AC_err = 0.047   # [um] I2 thickness, originally 400
 
-dS_E = (4*dS_E1 + 3*dS_E2)/7; dSE_err = (4*dSE1_err + 3*dSE2_err)/7  # width-weighted thickness, S layer with step in height
+# dS_E = (2*dS_E1 + 2*dS_E2+ 3*dS_E3)/7; dSE_err = (2*dSE1_err + 2*dSE2_err + 3*dSE3_err)/7  # width-weighted thickness, S layer with step in height
 layer_d0 = np.array([dS_ABD, dS_CF, dS_E, dS_G, dW1_ABD,  dW1_E, dI1_ABC, dI_DF, dW2_AC, dW2_BE, dI2_AC])
 derrs = np.array([dSABD_err, dSCF_err, dSE_err, dSG_err, dW1ABD_err,  dW1E_err, dI1ABC_err, dIDF_err, dW2AC_err, dW2BE_err, dI2AC_err])
 if vary_thickness==False: derrs = np.zeros_like(layer_d0)  # turn off errors if not varying thickness (shouldn't matter but for good measure)
 
 # initial guess and bounds for fitter
-alim = [-1, 1] if constrained else [-np.inf, np.inf]   # limit alpha to [-1, 1] if constraining fit
-if model=='three-layer':
-    p0 = np.array([1., 0.75, 1., 0.5, 0., 1.])   # U, W, I [pW/K], alpha_U, alpha_W, alpha_I [unitless]
-    # bounds = [(0, np.inf), (0, np.inf), (0, np.inf), (alim[0], alim[1]), (alim[0], alim[1]), (alim[0], alim[1])]   # bounds for 6 fit parameters: G_U, G_W, G_I, alpha_U, alpha_W, alpha_I
-    bounds = [(-np.inf, np.inf), (-np.inf, np.inf), (-np.inf, np.inf), (alim[0], alim[1]), (alim[0], alim[1]), (alim[0], alim[1])]   # bounds for 6 fit parameters: G_U, G_W, G_I, alpha_U, alpha_W, alpha_I
-elif model=='two-layer':
-    p0 = np.array([1, 0.5, 0.5, 0.5])   # U, W [pW/K], alpha_U, alpha_W [unitless]
-    # bounds = [(0, np.inf), (0, np.inf), (alim[0], alim[1]), (alim[0], alim[1])]   # bounds for 4 fit parameters: G_U, G_W, G_I, alpha_U, alpha_W, alpha_I
-    bounds = [(-np.inf, np.inf), (-np.inf, np.inf), (alim[0], alim[1]), (alim[0], alim[1])]   # bounds for 4 fit parameters: G_U, G_W, G_I, alpha_U, alpha_W, alpha_I
+# alim = [-1, 1] if constrained else [-np.inf, np.inf]   # limit alpha to [-1, 1] if constraining fit
+# if model=='Three-Layer':
+#     p0 = np.array([1., 0.5, 1., 1., 0., 1.])   # U, W, I [pW/K], alpha_U, alpha_W, alpha_I [unitless]
+#     # bounds = [(0, np.inf), (0, np.inf), (0, np.inf), (alim[0], alim[1]), (alim[0], alim[1]), (alim[0], alim[1])]   # bounds for 6 fit parameters: G_U, G_W, G_I, alpha_U, alpha_W, alpha_I
+#     bounds = [(-np.inf, np.inf), (-np.inf, np.inf), (-np.inf, np.inf), (alim[0], alim[1]), (alim[0], alim[1]), (alim[0], alim[1])]   # bounds for 6 fit parameters: G_U, G_W, G_I, alpha_U, alpha_W, alpha_I
+# elif model=='Two-Layer':
+#     p0 = np.array([1, 0.5, 0.5, 0.5])   # U, W [pW/K], alpha_U, alpha_W [unitless]
+#     # bounds = [(0, np.inf), (0, np.inf), (alim[0], alim[1]), (alim[0], alim[1])]   # bounds for 4 fit parameters: G_U, G_W, G_I, alpha_U, alpha_W, alpha_I
+#     bounds = [(-np.inf, np.inf), (-np.inf, np.inf), (alim[0], alim[1]), (alim[0], alim[1])]   # bounds for 4 fit parameters: G_U, G_W, G_I, alpha_U, alpha_W, alpha_I
 
 # G_TES data 
 ydata_lessbling = np.array([13.95595194, 4.721712381, 7.89712938, 10.11727864, 17.22593561, 5.657104443, 15.94469664, 3.513915367])   # pW/K at 170 mK fitting for G explicitly, weighted average only on 7; bolo 1b, 24, 23, 22, 21, 20, 7*, 13 
@@ -128,13 +147,21 @@ ll_vl = np.array([120., 220., 320., 420., 520., 620.])*1E-3   # mm
 llvl_all = np.append(ll_vl, ll_vl); ydatavl_all = np.append(ydatavl_lb, ydatavl_mb); sigmavl_all = np.append(sigmavl_lb, sigmavl_mb)
 vlength_data = np.stack([ydatavl_all, sigmavl_all, llvl_all*1E3])
 
-# for plotting
-if model=='three-layer':
+# initial guess and bounds for fitter
+alim = [-1, 1] if constrained else [-np.inf, np.inf]   # limit alpha to [-1, 1] if constraining fit
+if model=='Three-Layer':
     param_labels = ['G$_U$', 'G$_W$', 'G$_I$', '$\\alpha_U$', '$\\alpha_W$', '$\\alpha_I$']  
-elif model=='two-layer':
+    p0 = np.array([1., 0.5, 1., 1., 0., 1.])   # U, W, I [pW/K], alpha_U, alpha_W, alpha_I [unitless]
+    # bounds = [(0, np.inf), (0, np.inf), (0, np.inf), (alim[0], alim[1]), (alim[0], alim[1]), (alim[0], alim[1])]   # bounds for 6 fit parameters: G_U, G_W, G_I, alpha_U, alpha_W, alpha_I
+    bounds = [(-np.inf, np.inf), (-np.inf, np.inf), (-np.inf, np.inf), (alim[0], alim[1]), (alim[0], alim[1]), (alim[0], alim[1])]   # bounds for 6 fit parameters: G_U, G_W, G_I, alpha_U, alpha_W, alpha_I
+elif model=='Two-Layer':
     param_labels = ['G$_U$', 'G$_W$', '$\\alpha_U$', '$\\alpha_W$']  
+    p0 = np.array([1, 0.5, 0.5, 0.5])   # U, W [pW/K], alpha_U, alpha_W [unitless]
+    # bounds = [(0, np.inf), (0, np.inf), (alim[0], alim[1]), (alim[0], alim[1])]   # bounds for 4 fit parameters: G_U, G_W, G_I, alpha_U, alpha_W, alpha_I
+    bounds = [(-np.inf, np.inf), (-np.inf, np.inf), (alim[0], alim[1]), (alim[0], alim[1])]   # bounds for 4 fit parameters: G_U, G_W, G_I, alpha_U, alpha_W, alpha_I
 a0str = '(-\infty' if np.isinf(alim[0]) else '['+str(alim[0]); a1str = '\infty)' if np.isinf(alim[1]) else str(alim[1])+']'
-plot_title = '$\\boldsymbol{\\mathbf{\\alpha \in '+a0str+','+a1str+'}}$'   
+# plot_title = '$\\boldsymbol{\\mathbf{\\alpha \in '+a0str+','+a1str+'}}$'   
+plot_title = '$\\textbf{'+model+' Model}$'   
 
 # use LaTeX fonts for paper plots
 plt.rc('text', usetex=True); plt.rc('font', family='serif'); plt.rc('font', size=15); plt.rc('font', weight='normal')
@@ -144,11 +171,20 @@ plt.rcParams['ytick.major.size'] = 5; plt.rcParams['ytick.minor.visible'] = Fals
 ### Execute Analysis
 if run_sim:   # run simulation 
     sim_dict = runsim_chisq(n_its, p0, data, bounds, plot_dir, show_simGdata=show_simGdata, save_figs=save_figs, save_sim=save_sim, sim_file=sim_file, 
-                            fn_comments=fn_comments, calc=calc, vary_thickness=vary_thickness, derrs=derrs, layer_d0=layer_d0, model=model)  
+                            fn_comments=fn_comments, calc=calc, vary_thickness=vary_thickness, derrs=derrs, layer_d0=layer_d0, model=model, 
+                            sigma_fromsim=sigma_fromsim)  
 else:   # load simulation data
     with open(sim_file, 'rb') as infile:   # load simulation pkl
         sim_dict = pkl.load(infile)
 sim_data = sim_dict['sim']
+
+if sigma_fromsim:   # overwright data error bars with spread of simulated predicted G's
+    print("Overwriting data error bars with spread of simulated predicted G(d0)s")
+    sigma_Gpred = sim_dict['fit']['Gpred_std']
+    data = [data[0][:], sigma_Gpred]
+
+if sigma_fromsigd:   # i don't think you can do this without assuming a G0 and alpha
+    sigma_d = layer_d0*derrs # (G0 / d0**2 * 4*d)**2 * sigma_d**2
 
 if quality_plots:   # plot G_x vs alpha_x parameter space with various fit results
     ### plot fit in 2D parameter space, take mean values of simulation
@@ -165,7 +201,7 @@ if quality_plots:   # plot G_x vs alpha_x parameter space with various fit resul
             vals_med = np.array([params_med[0], params_med[1], params_med[2], params_med[3], params_med[4], params_med[5], kappas_med[0], kappas_med[1], kappas_med[2], Gwire_med, chisq_med])
             vals_err = np.array([paramerrs_mean[0], paramerrs_mean[1], paramerrs_mean[2], paramerrs_mean[3], paramerrs_mean[4], paramerrs_mean[5], kappaerrs_mean[0], kappaerrs_mean[1], kappaerrs_mean[2], sigmaGwire_mean, ''])   # should be the same for mean and median
             csv_params = np.array(['GU (pW/K)', 'GW (pW/K)', 'GI (pW/K)', 'alphaU', 'alphaW', 'alphaI', 'kappaU (pW/K/um)', 'kappaW (pW/K/um)', 'kappaI (pW/K/um)', 'Gwire (pW/K)', 'Chi-sq val'])
-        elif model=='two-layer':
+        elif model=='Two-Layer':
             vals_mean = np.array([params_mean[0], params_mean[1], params_mean[2], params_mean[3], kappas_mean[0], kappas_mean[1], Gwire_mean, chisq_mean])
             vals_med = np.array([params_med[0], params_med[1], params_med[2], params_med[3], kappas_med[0], kappas_med[1], Gwire_med, chisq_med])
             vals_err = np.array([paramerrs_mean[0], paramerrs_mean[1], paramerrs_mean[2], paramerrs_mean[3], kappaerrs_mean[0], kappaerrs_mean[1], sigmaGwire_mean, ''])   # should be the same for mean and median
