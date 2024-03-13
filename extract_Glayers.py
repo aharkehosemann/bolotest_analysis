@@ -28,6 +28,8 @@ adding 30 nm to leg C dI1 seems to do good things?
 
 try: enlarging data error bars on smaller G bolos
 revisit 2 layer with updated thicknesses
+we probably just need to increase error bars on our data points. we can estimate by what factor by looking at spread in predictions
+two layer is still dookie with new thicknesses
 
 TODO: revisit error bars on layer widths, add error of d in chi-sq calc?, handle highly variable texture, joel is interested in legacy predictions with fixed normalized residuals
 """
@@ -37,9 +39,10 @@ import csv
 
 ### User Switches
 # analysis
-run_sim = True   # run MC simulation for fitting model
+run_sim = False   # run MC simulation for fitting model
+show_simGdata = False   # show simulated y-data plots during MC simulation
 quality_plots = False   # results on G_x vs alpha_x parameter space for each layer
-pairwise_plots = True   # histogram and correlations of simulated fit parameters
+pairwise_plots = False   # histogram and correlations of simulated fit parameters
 compare_modelanddata = True   # plot model predictions and bolotest data
 compare_legacy = True   # compare with NIST sub-mm bolo legacy data
 lit_compare = False   # compare measured conductivities with values from literature
@@ -49,17 +52,16 @@ manual_params = False   # pick parameters manually and compare data
 scrap = False
 
 # options
-model = 'Three-Layer'   # two- or three-layer model?
+model = 'Three-Layer'   # Two- or Three-Layer model?
 constrained = False   # use constrained model results
-n_its = int(1E1)   # number of iterations in MC simulation
+n_its = int(1E3)   # number of iterations in MC simulation
 sigma_fromsim = False   # calculate data point error bars from simulated Gtotals
 sigma_fromsigd = False   # calculate max sigma_data from sigma_d's assuming alpha=1
 vmax = 1E4   # quality plot color bar scaling
 calc = 'Median'   # how to evaluate fit parameters from simluation data - options are 'Mean' and 'Median'
 qplim = [-1,2]   # x- and y-axis limits for quality plot
 plot_bolo1b = True   # add bolo1 data to legacy prediction comparison plot, might turn off for paper figures
-show_simGdata = False   # show simulated y-data plots during MC simulation
-
+ 
 # save results
 save_figs = True   # save figures 
 save_sim = True   # save simulation data
@@ -67,7 +69,7 @@ save_csv = True   # save csv file of results
 
 # where to save results
 analysis_dir = '/Users/angi/NIS/Bolotest_Analysis/'
-fn_comments = '_test'; vary_thickness = True; # vary film thickness, layer-specific error bars
+# fn_comments = '_test'; vary_thickness = True; # vary film thickness, layer-specific error bars
 # fn_comments = '_postFIB_varyd'; vary_thickness = True; # vary film thickness, layer-specific error bars
 # fn_comments = '_postFIB_varyd_originald0s'; vary_thickness = False; # don't vary film thickness, original d estimates
 # fn_comments = '_postFIB_originald0s'; vary_thickness = False; # don't vary film thickness, original d estimates
@@ -84,20 +86,26 @@ fn_comments = '_test'; vary_thickness = True; # vary film thickness, layer-speci
 # fn_comments = '_twolayermodel_suppressGtrenched_5pc'; vary_thickness = True; # vary film thickness, treat substrate on legs B, E, and G as trenched
 # fn_comments = '_threelayermodel_suppressandrevisitdS'; vary_thickness = True; # vary film thickness, revisited thickness and error bars on S layers
 # fn_comments = '_threelayermodel_suppressandrevisitdSanddI'; vary_thickness = True; # vary film thickness, revisited thickness and error bars on S and I layers
-# fn_comments = '_threelayermodel_onlyfebFIBmsmts'; vary_thickness = True; # vary film thickness, revisited thickness and error bars on S and I layers
+fn_comments = '_threelayermodel_onylfebFIBmsmts'; vary_thickness = True; # vary film thickness, revisited thickness and error bars on S and I layers
+# fn_comments = '_twolayermodel_onlyfebFIBmsmts'; vary_thickness = True; # vary film thickness, revisited thickness and error bars on S and I layers
 # fn_comments = '_threelayermodel_increaselegCdI130nn'; vary_thickness = True; # vary film thickness, revisited thickness and error bars on S and I layers
+# fn_comments = '_increased_dataerrorbars_forfun'; vary_thickness = True; # vary film thickness, revisited thickness and error bars on S and I layers
+# fn_comments = '_increasedsigmaG_twolayermodel'; vary_thickness = True; # vary film thickness, revisited thickness and error bars on S and I layers
+# fn_comments = '_sigmaGTES15pc_threelayermodel'; vary_thickness = True; # vary film thickness, revisited thickness and error bars on S and I layers
+# fn_comments = '_sigmaGTES15pc_twolayermodel'; vary_thickness = True; # vary film thickness, revisited thickness and error bars on S and I layers
+# fn_comments = '_sigmaGTES_pcGfromsimestimate_threelayermodel'; vary_thickness = True; # vary film thickness, revisited thickness and error bars on S and I layers
 
 ### layer thicknesses values; default from 2 rounds of FIB measurements: layer_ds = np.array([0.372, 0.312, 0.199, 0.181, 0.162, 0.418, 0.298, 0.596, 0.354, 0.314, 0.302])
 # dS_ABD = 0.372; dS_CF = 0.312; dS_E1 = 0.108; dS_E2 = 0.321; dS_G = 0.181   # [um] substrate thickness for different legs, originally 420, 400, 420, 420, 340
 # dS_ABD = 0.384; dS_CF = 0.321; dS_E1 = 0.164; dS_E2 = 0.345; dS_E3 = 0.313; dS_G = 0.235   # [um] substrate thickness for different legs, originally 420, 400, 420, 420, 420, 340
 dS_ABD = 0.386; dS_CF = 0.312; dS_E = 0.280; dS_G = 0.235   # [um] substrate thickness for different legs, originally 420, 400, 420, 340
 dSABD_err = 0.017; dSCF_err = 0.013; dSE_err = 0.04*dS_E; dSG_err = 0.04*dS_G   # [um] substrate thickness error bars
-
 dW1_ABD = 0.167; dW1_E = 0.418   # [um] W1 thickness for different legs, originally 160, 100+285
 dW1ABD_err = 0.007; dW1E_err = 0.04*dW1_E   # [um] W1 thickness error bars, originally 160, 100 nm
 # dI1_ABC = 0.298; dI_DF = 0.596   # [um] I1 thickness for different legs, originally 350, 270+400
 dI1_ABC = 0.305; dI_DF = 0.604   # [um] I1 thickness for different legs, originally 350, 270+400
 dI1ABC_err = 0.027; dIDF_err = 0.014   # [um] I1 thickness error bars, originally 350, 270 nm
+# dI1ABC_err = 0.04; dIDF_err = 0.014   # [um] I1 thickness error bars, originally 350, 270 nm
 # dI1_ABC = 0.258; dI_DF = 0.610   # [um] I1 thickness for different legs, originally 350, 270+400
 dW2_AC = 0.358; dW2_BE = 0.317   # [um] W2 thickness for different legs, originally 340, 285
 dW2AC_err = 0.003; dW2BE_err = 0.04*dW2_BE   # [um] W2 thickness error bars, originally 340, 285 nm
@@ -114,31 +122,22 @@ dI2AC_err = 0.026   # [um] I2
 # dI2_AC = 0.400   # [um] I2 thickness, originally 400
 
 
-# dS_E = (2*dS_E1 + 2*dS_E2+ 3*dS_E3)/7; dSE_err = (2*dSE1_err + 2*dSE2_err + 3*dSE3_err)/7  # width-weighted thickness, S layer with step in height
 layer_d0 = np.array([dS_ABD, dS_CF, dS_E, dS_G, dW1_ABD,  dW1_E, dI1_ABC, dI_DF, dW2_AC, dW2_BE, dI2_AC])
 derrs = np.array([dSABD_err, dSCF_err, dSE_err, dSG_err, dW1ABD_err,  dW1E_err, dI1ABC_err, dIDF_err, dW2AC_err, dW2BE_err, dI2AC_err])
 if vary_thickness==False: derrs = np.zeros_like(layer_d0)  # turn off errors if not varying thickness (shouldn't matter but for good measure)
 
-# initial guess and bounds for fitter
-# alim = [-1, 1] if constrained else [-np.inf, np.inf]   # limit alpha to [-1, 1] if constraining fit
-# if model=='Three-Layer':
-#     p0 = np.array([1., 0.5, 1., 1., 0., 1.])   # U, W, I [pW/K], alpha_U, alpha_W, alpha_I [unitless]
-#     # bounds = [(0, np.inf), (0, np.inf), (0, np.inf), (alim[0], alim[1]), (alim[0], alim[1]), (alim[0], alim[1])]   # bounds for 6 fit parameters: G_U, G_W, G_I, alpha_U, alpha_W, alpha_I
-#     bounds = [(-np.inf, np.inf), (-np.inf, np.inf), (-np.inf, np.inf), (alim[0], alim[1]), (alim[0], alim[1]), (alim[0], alim[1])]   # bounds for 6 fit parameters: G_U, G_W, G_I, alpha_U, alpha_W, alpha_I
-# elif model=='Two-Layer':
-#     p0 = np.array([1, 0.5, 0.5, 0.5])   # U, W [pW/K], alpha_U, alpha_W [unitless]
-#     # bounds = [(0, np.inf), (0, np.inf), (alim[0], alim[1]), (alim[0], alim[1])]   # bounds for 4 fit parameters: G_U, G_W, G_I, alpha_U, alpha_W, alpha_I
-#     bounds = [(-np.inf, np.inf), (-np.inf, np.inf), (alim[0], alim[1]), (alim[0], alim[1])]   # bounds for 4 fit parameters: G_U, G_W, G_I, alpha_U, alpha_W, alpha_I
-
 # G_TES data 
-ydata_lessbling = np.array([13.95595194, 4.721712381, 7.89712938, 10.11727864, 17.22593561, 5.657104443, 15.94469664, 3.513915367])   # pW/K at 170 mK fitting for G explicitly, weighted average only on 7; bolo 1b, 24, 23, 22, 21, 20, 7*, 13 
-sigma_lessbling = np.array([0.073477411, 0.034530085, 0.036798694, 0.04186006, 0.09953389, 0.015188074, 0.083450365, 0.01762426])
-ydata = ydata_lessbling; sigma = sigma_lessbling
+ydata = np.array([13.95595194, 4.721712381, 7.89712938, 10.11727864, 17.22593561, 5.657104443, 15.94469664, 3.513915367])   # pW/K at 170 mK fitting for G explicitly, weighted average only on 7; bolo 1b, 24, 23, 22, 21, 20, 7*, 13 
+sigma = np.array([0.073477411, 0.034530085, 0.036798694, 0.04186006, 0.09953389, 0.015188074, 0.083450365, 0.01762426])
+# sigma = np.array([0.073477411, 0.05, 0.05, 0.04186006, 0.09953389, 0.05, 0.083450365, 0.05])
+# sigma = np.array([0.1, 0.1, 0.1, 0.1, 0.1, 0.1, 0.1, 0.1])*1.5   # error bars = same for all data points
+# sigma_percentG = np.array([0.077, 0.059, 0.069, 0.80, 0.043, 0.029, 0.053, 0.034])   # % error bars from simulated G(d0) estimate
+# sigma = sigma_percentG*ydata
 # sigma_percentG = sigmaG_frac * ydata_lessbling
+data = [ydata, sigma] 
 
 bolos = np.array(['bolo 1b', 'bolo 24', 'bolo 23', 'bolo 22', 'bolo 21', 'bolo 20', 'bolo 7', 'bolo 13'])
 plot_dir = analysis_dir + 'Plots/layer_extraction_analysis/'; sim_file = analysis_dir + 'Analysis_Files/sim' + fn_comments + '.pkl'; csv_file = analysis_dir + 'Analysis_Files/sim' + fn_comments + '_results.csv'
-data = [ydata, sigma] 
 
 # bolos 1a-f vary leg length, all four legs have full microstrip
 ydatavl_lb = np.array([22.17908389, 13.95595194, 10.21776418, 8.611287109, 7.207435165, np.nan]); sigmavl_lb = np.array([0.229136979, 0.073477411, 0.044379343, 0.027206631, 0.024171663, np.nan])   # pW/K, bolos with minimal bling
@@ -176,15 +175,18 @@ if run_sim:   # run simulation
 else:   # load simulation data
     with open(sim_file, 'rb') as infile:   # load simulation pkl
         sim_dict = pkl.load(infile)
+    if show_simGdata:
+        plot_simdata(sim_dict, save_figs=save_figs, plot_dir=plot_dir, fn_comments=fn_comments)
 sim_data = sim_dict['sim']
 
 if sigma_fromsim:   # overwright data error bars with spread of simulated predicted G's
     print("Overwriting data error bars with spread of simulated predicted G(d0)s")
-    sigma_Gpred = sim_dict['fit']['Gpred_std']
-    data = [data[0][:], sigma_Gpred]
+    sigma_Gsim = sim_dict['fit']['Gsim_std']
+    data = [data[0][:], sigma_Gsim]
 
 if sigma_fromsigd:   # i don't think you can do this without assuming a G0 and alpha
     sigma_d = layer_d0*derrs # (G0 / d0**2 * 4*d)**2 * sigma_d**2
+
 
 if quality_plots:   # plot G_x vs alpha_x parameter space with various fit results
     ### plot fit in 2D parameter space, take mean values of simulation
