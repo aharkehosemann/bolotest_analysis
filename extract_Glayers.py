@@ -26,12 +26,8 @@ excluded jan FIB measurements because the sample was tilted
 treated trenched layers by suppressing G 10-20%, weighted by the width of the texturized area
 adding 30 nm to leg C dI1 seems to do good things?
 
-try: enlarging data error bars on smaller G bolos
-revisit 2 layer with updated thicknesses
-we probably just need to increase error bars on our data points. we can estimate by what factor by looking at spread in predictions
-two layer is still dookie with new thicknesses
 
-TODO: revisit error bars on layer widths, add error of d in chi-sq calc?, handle highly variable texture, joel is interested in legacy predictions with fixed normalized residuals
+TODO: diff between sigma = sigma_prediction vs sigma = quad sum of prediction and data
 """
 from bolotest_routines import *
 from scipy.optimize import fsolve
@@ -39,29 +35,30 @@ import csv
 
 ### User Switches
 # analysis
-run_sim = False   # run MC simulation for fitting model
+run_sim = True   # run MC simulation for fitting model
 show_simGdata = False   # show simulated y-data plots during MC simulation
-quality_plots = False   # results on G_x vs alpha_x parameter space for each layer
-pairwise_plots = False   # histogram and correlations of simulated fit parameters
-compare_modelanddata = True   # plot model predictions and bolotest data
-compare_legacy = True   # compare with NIST sub-mm bolo legacy data
+quality_plots = True   # results on G_x vs alpha_x parameter space for each layer
+pairwise_plots = True   # histogram and correlations of simulated fit parameters
+compare_modelanddata = False   # plot model predictions and bolotest data
+compare_legacy = False   # compare with NIST sub-mm bolo legacy data
 lit_compare = False   # compare measured conductivities with values from literature
 design_implications = False   # NEP predictions from resulting model
 analyze_vlengthdata = False   # look at bolotest data vs leg length
 manual_params = False   # pick parameters manually and compare data
 scrap = False
+plot_Gsup = False
 
 # options
 model = 'Three-Layer'   # Two- or Three-Layer model?
 constrained = False   # use constrained model results
-n_its = int(1E3)   # number of iterations in MC simulation
-sigma_fromsim = False   # calculate data point error bars from simulated Gtotals
-sigma_fromsigd = False   # calculate max sigma_data from sigma_d's assuming alpha=1
-vmax = 1E4   # quality plot color bar scaling
+n_its = int(1E2)   # number of iterations in MC simulation
+supG = 0.0    # reduce G for substrate on legs B, E & G based on surface roughness
+vmax = 1E3   # quality plot color bar scaling
 calc = 'Median'   # how to evaluate fit parameters from simluation data - options are 'Mean' and 'Median'
 qplim = [-1,2]   # x- and y-axis limits for quality plot
 plot_bolo1b = True   # add bolo1 data to legacy prediction comparison plot, might turn off for paper figures
- 
+print_results = True   # print fit parameters and chi-squared value of resulting model
+
 # save results
 save_figs = True   # save figures 
 save_sim = True   # save simulation data
@@ -69,58 +66,25 @@ save_csv = True   # save csv file of results
 
 # where to save results
 analysis_dir = '/Users/angi/NIS/Bolotest_Analysis/'
-# fn_comments = '_test'; vary_thickness = True; # vary film thickness, layer-specific error bars
-# fn_comments = '_postFIB_varyd'; vary_thickness = True; # vary film thickness, layer-specific error bars
-# fn_comments = '_postFIB_varyd_originald0s'; vary_thickness = False; # don't vary film thickness, original d estimates
-# fn_comments = '_postFIB_originald0s'; vary_thickness = False; # don't vary film thickness, original d estimates
-# fn_comments = '_twolayermodel'; vary_thickness = False; # vary film thickness, layer-specific error bars
-# fn_comments = '_twolayermodel_varythickness'; vary_thickness = True; # vary film thickness, layer-specific error bars
-# fn_comments = '_twolayermodel_varythickness_suppressGU'; vary_thickness = True; # vary film thickness, suppress G of roughened substrate layers
-# fn_comments = '_threelayermodel_varythickness_suppressGU'; vary_thickness = True; # vary film thickness, suppress G of roughened substrate layers
-# fn_comments = '_threelayermodel_varythickness_increasedU150nm'; vary_thickness = True; # vary film thickness, add extra material to leg B
-# fn_comments = '_twolayermodel_varythickness_increasedU150nm'; vary_thickness = True; # vary film thickness, add extra material to leg B
-# fn_comments = '_twolayermodel_varythickness_increasedU150nm_G0unconstrained'; vary_thickness = True; # vary film thickness, add extra material to leg B, allow -G0
-# fn_comments = '_threelayermodel_varythickness_suppresstrenched10pc'; vary_thickness = True; # vary film thickness, treat substrate on legs B, E, and G as trenched
-# fn_comments = '_threelayermodel_varythickness_suppresstrenched_5pc'; vary_thickness = True; # vary film thickness, treat substrate on legs B, E, and G as trenched
-# fn_comments = '_twolayermodel_suppressGtrenched_5pc'; vary_thickness = True; # vary film thickness, treat substrate on legs B, E, and G as trenched
-# fn_comments = '_twolayermodel_suppressGtrenched_5pc'; vary_thickness = True; # vary film thickness, treat substrate on legs B, E, and G as trenched
-# fn_comments = '_threelayermodel_suppressandrevisitdS'; vary_thickness = True; # vary film thickness, revisited thickness and error bars on S layers
-# fn_comments = '_threelayermodel_suppressandrevisitdSanddI'; vary_thickness = True; # vary film thickness, revisited thickness and error bars on S and I layers
-fn_comments = '_threelayermodel_onylfebFIBmsmts'; vary_thickness = True; # vary film thickness, revisited thickness and error bars on S and I layers
+# fn_comments = '_threelayermodel_onylfebFIBmsmts'; vary_thickness = True; # vary film thickness, revisited thickness and error bars on S and I layers
 # fn_comments = '_twolayermodel_onlyfebFIBmsmts'; vary_thickness = True; # vary film thickness, revisited thickness and error bars on S and I layers
-# fn_comments = '_threelayermodel_increaselegCdI130nn'; vary_thickness = True; # vary film thickness, revisited thickness and error bars on S and I layers
-# fn_comments = '_increased_dataerrorbars_forfun'; vary_thickness = True; # vary film thickness, revisited thickness and error bars on S and I layers
-# fn_comments = '_increasedsigmaG_twolayermodel'; vary_thickness = True; # vary film thickness, revisited thickness and error bars on S and I layers
-# fn_comments = '_sigmaGTES15pc_threelayermodel'; vary_thickness = True; # vary film thickness, revisited thickness and error bars on S and I layers
-# fn_comments = '_sigmaGTES15pc_twolayermodel'; vary_thickness = True; # vary film thickness, revisited thickness and error bars on S and I layers
 # fn_comments = '_sigmaGTES_pcGfromsimestimate_threelayermodel'; vary_thickness = True; # vary film thickness, revisited thickness and error bars on S and I layers
+# fn_comments = '_sigmaGTES_pcGfromsimestimate_threelayermodel_dontvarythickness'; vary_thickness = False; # vary film thickness, revisited thickness and error bars on S and I layers
+# fn_comments = '_threelayermodel_varythickness_suppress05pc'; vary_thickness = True; # suppress G of roughened layers by 10%
+# fn_comments = '_threelayermodel_varythickness_noGsuppression'; vary_thickness = True; # suppress G of roughened layers by 10%
+fn_comments = '_threelayermodel_varythickness_testGpredfromdsim'; vary_thickness = True; # suppress G of roughened layers by 10%
 
 ### layer thicknesses values; default from 2 rounds of FIB measurements: layer_ds = np.array([0.372, 0.312, 0.199, 0.181, 0.162, 0.418, 0.298, 0.596, 0.354, 0.314, 0.302])
-# dS_ABD = 0.372; dS_CF = 0.312; dS_E1 = 0.108; dS_E2 = 0.321; dS_G = 0.181   # [um] substrate thickness for different legs, originally 420, 400, 420, 420, 340
-# dS_ABD = 0.384; dS_CF = 0.321; dS_E1 = 0.164; dS_E2 = 0.345; dS_E3 = 0.313; dS_G = 0.235   # [um] substrate thickness for different legs, originally 420, 400, 420, 420, 420, 340
 dS_ABD = 0.386; dS_CF = 0.312; dS_E = 0.280; dS_G = 0.235   # [um] substrate thickness for different legs, originally 420, 400, 420, 340
 dSABD_err = 0.017; dSCF_err = 0.013; dSE_err = 0.04*dS_E; dSG_err = 0.04*dS_G   # [um] substrate thickness error bars
 dW1_ABD = 0.167; dW1_E = 0.418   # [um] W1 thickness for different legs, originally 160, 100+285
 dW1ABD_err = 0.007; dW1E_err = 0.04*dW1_E   # [um] W1 thickness error bars, originally 160, 100 nm
-# dI1_ABC = 0.298; dI_DF = 0.596   # [um] I1 thickness for different legs, originally 350, 270+400
 dI1_ABC = 0.305; dI_DF = 0.604   # [um] I1 thickness for different legs, originally 350, 270+400
 dI1ABC_err = 0.027; dIDF_err = 0.014   # [um] I1 thickness error bars, originally 350, 270 nm
-# dI1ABC_err = 0.04; dIDF_err = 0.014   # [um] I1 thickness error bars, originally 350, 270 nm
-# dI1_ABC = 0.258; dI_DF = 0.610   # [um] I1 thickness for different legs, originally 350, 270+400
 dW2_AC = 0.358; dW2_BE = 0.317   # [um] W2 thickness for different legs, originally 340, 285
 dW2AC_err = 0.003; dW2BE_err = 0.04*dW2_BE   # [um] W2 thickness error bars, originally 340, 285 nm
-# dI2_AC = 0.304   # [um] I2 thickness, originally 400
 dI2_AC = 0.298   # [um] I2 thickness, originally 400
 dI2AC_err = 0.026   # [um] I2 
-# dI2_AC = 0.252   # [um] I2 thickness, originally 400
-
-# ### layer thicknesses values; default from 2 rounds of FIB measurements: layer_ds = np.array([0.372, 0.312, 0.199, 0.181, 0.162, 0.418, 0.298, 0.596, 0.354, 0.314, 0.302])
-# dS_ABD = 0.420; dS_CF = 0.400; dS_E1 = 0.420; dS_E2 = 0.420; dS_G = 0.340   # [um] substrate thickness for different legs, originally 420, 400, 420, 420, 340; step in d on leg E 
-# dW1_ABD = 0.160; dW1_E = 0.385   # [um] W1 thickness for different legs, originally 160, 100+285
-# dI1_ABC = 0.350; dI_DF = 0.670   # [um] I1 thickness for different legs, originally 350, 270+400
-# dW2_AC = 0.340; dW2_BE = 0.285   # [um] W2 thickness for different legs, originally 340, 285
-# dI2_AC = 0.400   # [um] I2 thickness, originally 400
-
 
 layer_d0 = np.array([dS_ABD, dS_CF, dS_E, dS_G, dW1_ABD,  dW1_E, dI1_ABC, dI_DF, dW2_AC, dW2_BE, dI2_AC])
 derrs = np.array([dSABD_err, dSCF_err, dSE_err, dSG_err, dW1ABD_err,  dW1E_err, dI1ABC_err, dIDF_err, dW2AC_err, dW2BE_err, dI2AC_err])
@@ -129,9 +93,8 @@ if vary_thickness==False: derrs = np.zeros_like(layer_d0)  # turn off errors if 
 # G_TES data 
 ydata = np.array([13.95595194, 4.721712381, 7.89712938, 10.11727864, 17.22593561, 5.657104443, 15.94469664, 3.513915367])   # pW/K at 170 mK fitting for G explicitly, weighted average only on 7; bolo 1b, 24, 23, 22, 21, 20, 7*, 13 
 sigma = np.array([0.073477411, 0.034530085, 0.036798694, 0.04186006, 0.09953389, 0.015188074, 0.083450365, 0.01762426])
-# sigma = np.array([0.073477411, 0.05, 0.05, 0.04186006, 0.09953389, 0.05, 0.083450365, 0.05])
 # sigma = np.array([0.1, 0.1, 0.1, 0.1, 0.1, 0.1, 0.1, 0.1])*1.5   # error bars = same for all data points
-# sigma_percentG = np.array([0.077, 0.059, 0.069, 0.80, 0.043, 0.029, 0.053, 0.034])   # % error bars from simulated G(d0) estimate
+# sigma_percentG = np.array([0.077, 0.059, 0.069, 0.08, 0.043, 0.029, 0.053, 0.034])   # % error bars from simulated G(d0) estimate
 # sigma = sigma_percentG*ydata
 # sigma_percentG = sigmaG_frac * ydata_lessbling
 data = [ydata, sigma] 
@@ -151,12 +114,10 @@ alim = [-1, 1] if constrained else [-np.inf, np.inf]   # limit alpha to [-1, 1] 
 if model=='Three-Layer':
     param_labels = ['G$_U$', 'G$_W$', 'G$_I$', '$\\alpha_U$', '$\\alpha_W$', '$\\alpha_I$']  
     p0 = np.array([1., 0.5, 1., 1., 0., 1.])   # U, W, I [pW/K], alpha_U, alpha_W, alpha_I [unitless]
-    # bounds = [(0, np.inf), (0, np.inf), (0, np.inf), (alim[0], alim[1]), (alim[0], alim[1]), (alim[0], alim[1])]   # bounds for 6 fit parameters: G_U, G_W, G_I, alpha_U, alpha_W, alpha_I
     bounds = [(-np.inf, np.inf), (-np.inf, np.inf), (-np.inf, np.inf), (alim[0], alim[1]), (alim[0], alim[1]), (alim[0], alim[1])]   # bounds for 6 fit parameters: G_U, G_W, G_I, alpha_U, alpha_W, alpha_I
 elif model=='Two-Layer':
     param_labels = ['G$_U$', 'G$_W$', '$\\alpha_U$', '$\\alpha_W$']  
     p0 = np.array([1, 0.5, 0.5, 0.5])   # U, W [pW/K], alpha_U, alpha_W [unitless]
-    # bounds = [(0, np.inf), (0, np.inf), (alim[0], alim[1]), (alim[0], alim[1])]   # bounds for 4 fit parameters: G_U, G_W, G_I, alpha_U, alpha_W, alpha_I
     bounds = [(-np.inf, np.inf), (-np.inf, np.inf), (alim[0], alim[1]), (alim[0], alim[1])]   # bounds for 4 fit parameters: G_U, G_W, G_I, alpha_U, alpha_W, alpha_I
 a0str = '(-\infty' if np.isinf(alim[0]) else '['+str(alim[0]); a1str = '\infty)' if np.isinf(alim[1]) else str(alim[1])+']'
 # plot_title = '$\\boldsymbol{\\mathbf{\\alpha \in '+a0str+','+a1str+'}}$'   
@@ -170,44 +131,48 @@ plt.rcParams['ytick.major.size'] = 5; plt.rcParams['ytick.minor.visible'] = Fals
 ### Execute Analysis
 if run_sim:   # run simulation 
     sim_dict = runsim_chisq(n_its, p0, data, bounds, plot_dir, show_simGdata=show_simGdata, save_figs=save_figs, save_sim=save_sim, sim_file=sim_file, 
-                            fn_comments=fn_comments, calc=calc, vary_thickness=vary_thickness, derrs=derrs, layer_d0=layer_d0, model=model, 
-                            sigma_fromsim=sigma_fromsim)  
+                            fn_comments=fn_comments, supG=supG, calc=calc, vary_thickness=vary_thickness, derrs=derrs, layer_d0=layer_d0, model=model)
+                            # sigma_fromGpred=sigma_fromGpred)  
+
 else:   # load simulation data
     with open(sim_file, 'rb') as infile:   # load simulation pkl
         sim_dict = pkl.load(infile)
+    if print_results:
+        # sim_results = sort_results(sim_dict, print_results=True, calc=calc, model=model, layer_d0=layer_d0)
+        # fit_params, fit_errs, kappas, sigma_kappas, Gwire, sigma_Gwire, Gpred, sigma_Gpred, chisq_fit, rchisq_fit, chisq_pred, rchisq_pred = sim_results
+        fit_dict = sort_results(sim_dict, print_results=True, calc=calc, model=model, layer_d0=layer_d0)
+        # fit_params, fit_errs, kappas, sigma_kappas, Gwire, sigma_Gwire, Gpred, sigma_Gpred, chisq_fit, rchisq_fit, chisq_pred, rchisq_pred = sim_results
+
     if show_simGdata:
         plot_simdata(sim_dict, save_figs=save_figs, plot_dir=plot_dir, fn_comments=fn_comments)
-sim_data = sim_dict['sim']
 
-if sigma_fromsim:   # overwright data error bars with spread of simulated predicted G's
-    print("Overwriting data error bars with spread of simulated predicted G(d0)s")
-    sigma_Gsim = sim_dict['fit']['Gsim_std']
-    data = [data[0][:], sigma_Gsim]
-
-if sigma_fromsigd:   # i don't think you can do this without assuming a G0 and alpha
-    sigma_d = layer_d0*derrs # (G0 / d0**2 * 4*d)**2 * sigma_d**2
+# if sigma_fromGpred:   # overwright data error bars with spread of simulated predicted G's
+#     print("Overwriting data error bars with spread of simulated predicted G(d0)s")
+#     sigma_Gsim = sim_dict['fit']['Gsim_std']
+#     data = [data[0][:], sigma_Gsim]
 
 
 if quality_plots:   # plot G_x vs alpha_x parameter space with various fit results
     ### plot fit in 2D parameter space, take mean values of simulation
-    results_mean = qualityplots(data, sim_dict, plot_dir=plot_dir, save_figs=save_figs, fn_comments=fn_comments+'_mean', title=plot_title+'\\textbf{ (Mean)}', vmax=vmax, calc='Mean', qplim=qplim, layer_ds=layer_d0, model=model)
-    params_mean, paramerrs_mean, kappas_mean, kappaerrs_mean, Gwire_mean, sigmaGwire_mean, chisq_mean = results_mean
+    results_mean = qualityplots(sim_dict, print_results=True, plot_dir=plot_dir, save_figs=save_figs, fn_comments=fn_comments+'_mean', title=plot_title+'\\textbf{ (Mean)}', vmax=vmax, calc='Mean', qplim=qplim, layer_ds=layer_d0, model=model)
+    params_mean, paramerrs_mean, kappas_mean, kappaerrs_mean, Gwire_mean, sigmaGwire_mean, chisqf_mean, rchisqf_mean, chisqp_mean, rchisqp_mean = results_mean
 
     ### plot fit in 2D parameter space, take median values of simulation
-    results_med = qualityplots(data, sim_dict, plot_dir=plot_dir, save_figs=save_figs, fn_comments=fn_comments+'_median', title=plot_title+'\\textbf{ (Median)}', vmax=vmax, calc='Median', qplim=qplim, layer_ds=layer_d0, model=model)
-    params_med, paramerrs_med, kappas_med, kappaerrs_med, Gwire_med, sigmaGwire_med, chisq_med = results_med
+    results_med = qualityplots(sim_dict, print_results=True, plot_dir=plot_dir, save_figs=save_figs, fn_comments=fn_comments+'_median', title=plot_title+'\\textbf{ (Median)}', vmax=vmax, calc='Median', qplim=qplim, layer_ds=layer_d0, model=model)
+    params_med, paramerrs_med, kappas_med, kappaerrs_med, Gwire_med, sigmaGwire_med, chisqf_med, rchisqf_med, chisqp_med, rchisqp_med = results_med
+    print_results=False
 
     if save_csv:   # save model results to CSV file
-        if model=='three-layer':
-            vals_mean = np.array([params_mean[0], params_mean[1], params_mean[2], params_mean[3], params_mean[4], params_mean[5], kappas_mean[0], kappas_mean[1], kappas_mean[2], Gwire_mean, chisq_mean])
-            vals_med = np.array([params_med[0], params_med[1], params_med[2], params_med[3], params_med[4], params_med[5], kappas_med[0], kappas_med[1], kappas_med[2], Gwire_med, chisq_med])
-            vals_err = np.array([paramerrs_mean[0], paramerrs_mean[1], paramerrs_mean[2], paramerrs_mean[3], paramerrs_mean[4], paramerrs_mean[5], kappaerrs_mean[0], kappaerrs_mean[1], kappaerrs_mean[2], sigmaGwire_mean, ''])   # should be the same for mean and median
-            csv_params = np.array(['GU (pW/K)', 'GW (pW/K)', 'GI (pW/K)', 'alphaU', 'alphaW', 'alphaI', 'kappaU (pW/K/um)', 'kappaW (pW/K/um)', 'kappaI (pW/K/um)', 'Gwire (pW/K)', 'Chi-sq val'])
+        if model=='Three-Layer':
+            vals_mean = np.array([params_mean[0], params_mean[1], params_mean[2], params_mean[3], params_mean[4], params_mean[5], kappas_mean[0], kappas_mean[1], kappas_mean[2], Gwire_mean, chisqf_mean, rchisqf_mean])
+            vals_med = np.array([params_med[0], params_med[1], params_med[2], params_med[3], params_med[4], params_med[5], kappas_med[0], kappas_med[1], kappas_med[2], Gwire_med, chisqf_med, rchisqf_med])
+            vals_err = np.array([paramerrs_mean[0], paramerrs_mean[1], paramerrs_mean[2], paramerrs_mean[3], paramerrs_mean[4], paramerrs_mean[5], kappaerrs_mean[0], kappaerrs_mean[1], kappaerrs_mean[2], sigmaGwire_mean, '', ''])   # should be the same for mean and median
+            csv_params = np.array(['GU (pW/K)', 'GW (pW/K)', 'GI (pW/K)', 'alphaU', 'alphaW', 'alphaI', 'kappaU (pW/K/um)', 'kappaW (pW/K/um)', 'kappaI (pW/K/um)', 'Gwire (pW/K)', 'Chi-sq val', 'Red Chi-sq val'])
         elif model=='Two-Layer':
-            vals_mean = np.array([params_mean[0], params_mean[1], params_mean[2], params_mean[3], kappas_mean[0], kappas_mean[1], Gwire_mean, chisq_mean])
-            vals_med = np.array([params_med[0], params_med[1], params_med[2], params_med[3], kappas_med[0], kappas_med[1], Gwire_med, chisq_med])
-            vals_err = np.array([paramerrs_mean[0], paramerrs_mean[1], paramerrs_mean[2], paramerrs_mean[3], kappaerrs_mean[0], kappaerrs_mean[1], sigmaGwire_mean, ''])   # should be the same for mean and median
-            csv_params = np.array(['GU (pW/K)', 'GW (pW/K)', 'alphaU', 'alphaW', 'kappaU (pW/K/um)', 'kappaW (pW/K/um)', 'Gwire (pW/K)', 'Chi-sq val'])
+            vals_mean = np.array([params_mean[0], params_mean[1], params_mean[2], params_mean[3], kappas_mean[0], kappas_mean[1], Gwire_mean, chisqf_mean, rchisqf_mean])
+            vals_med = np.array([params_med[0], params_med[1], params_med[2], params_med[3], kappas_med[0], kappas_med[1], Gwire_med, chisqf_med, rchisqf_med])
+            vals_err = np.array([paramerrs_mean[0], paramerrs_mean[1], paramerrs_mean[2], paramerrs_mean[3], kappaerrs_mean[0], kappaerrs_mean[1], sigmaGwire_mean, '', ''])   # should be the same for mean and median
+            csv_params = np.array(['GU (pW/K)', 'GW (pW/K)', 'alphaU', 'alphaW', 'kappaU (pW/K/um)', 'kappaW (pW/K/um)', 'Gwire (pW/K)', 'Chi-sq val', 'Red Chi-sq val'])
 
         # write CSV     
         fields = np.array(['Parameter', 'Mean', 'Median', 'Error'])  
@@ -220,14 +185,13 @@ if quality_plots:   # plot G_x vs alpha_x parameter space with various fit resul
 
 if pairwise_plots:   ### pairwise correlation plots
 
-    pairfig = pairwise(sim_data, param_labels, title=plot_title, save_figs=save_figs, plot_dir=plot_dir, fn_comments=fn_comments)
-
+    pairfig = pairwise(sim_dict, param_labels, title=plot_title, save_figs=save_figs, plot_dir=plot_dir, fn_comments=fn_comments)
 
 if compare_modelanddata:
 
     title = plot_title+'$\\textbf{ Predictions}$'   
-    plot_modelvdata(sim_data, data, title=title+'$\\textbf{ ('+calc+')}$', layer_ds=layer_d0, pred_wfit=False, calc=calc, model=model, 
-                    save_figs=save_figs, plot_comments=fn_comments+'_'+calc, plot_dir=plot_dir)
+    plot_modelvdata(sim_dict, title=title+'$\\textbf{ ('+calc+')}$', layer_ds=layer_d0, pred_wfit=False, calc=calc, model=model, 
+                    supG=supG, save_figs=save_figs, plot_comments=fn_comments+'_'+calc, plot_dir=plot_dir)
 
 
 if compare_legacy:   # compare G predictions with NIST legacy data
@@ -240,14 +204,12 @@ if compare_legacy:   # compare G predictions with NIST legacy data
     data1b = np.array([ydata[0], sigma[0]]) if plot_bolo1b else []  # plot bolo1b data?
 
     # compare with legacy data
-    predict_Glegacy(sim_data, data1b=data1b, pred_wfit=False, calc=calc, save_figs=save_figs, title=title+'$\\textbf{ ('+calc+')}$', plot_comments=fn_comments+'_'+calc, fs=(7,7), model=model)
-    predict_Glegacy(sim_data, data1b=data1b, pred_wfit=False, calc='Median', save_figs=save_figs, title=title+'$\\textbf{ (Median), }\\mathbf{\\beta=0.8}$', plot_comments=fn_comments+'_median_beta0p8', fs=(7,7), Lscale=0.8, model=model)
-    # predict_Glegacy(sim_data, data1b=data1b, pred_wfit=False, calc='Mean', save_figs=save_figs, title=title+'$\\textbf{ (Mean)}$', plot_comments=fn_comments+'_mean', fs=(7,7))
-    # predict_Glegacy(sim_data, data1b=data1b, pred_wfit=False, calc='Mean', save_figs=save_figs, title=title+'$\\textbf{ (Mean), }\\mathbf{\\beta=0.8}$', plot_comments=fn_comments+'_mean_beta0p8', fs=(7,7), Lscale=0.8)
+    predict_Glegacy(sim_dict, data1b=data1b, pred_wfit=False, calc=calc, save_figs=save_figs, title=title+'$\\textbf{ ('+calc+')}$', plot_comments=fn_comments+'_'+calc, fs=(7,7), model=model)
+    predict_Glegacy(sim_dict, data1b=data1b, pred_wfit=False, calc='Median', save_figs=save_figs, title=title+'$\\textbf{ (Median), }\\mathbf{\\beta=0.8}$', plot_comments=fn_comments+'_median_beta0p8', fs=(7,7), Lscale=0.8, model=model)
     
-    title = '$\\textbf{ Legacy Data - }$'   
-    lAoLscale = 1.8
-    plot_comments='_scaled1p8'
+    # title = '$\\textbf{ Legacy Data - }$'   
+    # lAoLscale = 1.8
+    # plot_comments='_scaled1p8'
     # plot legacy data by itself, scale A/L?
     # plot_Glegacy(data1b=data1b, save_figs=save_figs, title=title+'$\\textbf{ No Scaling}$', plot_comments='_unscaledlowAoL', fs=(7,5), plot_dir=plot_dir)
     # plot_Glegacy(data1b=data1b, save_figs=save_figs, lAoLscale=lAoLscale, title=title+'$\\textbf{A/L }\\mathbf{<}\\textbf{ 1um scaled x'+str(lAoLscale)+'}$', plot_comments=plot_comments, fs=(7,5), plot_dir=plot_dir)
@@ -256,6 +218,7 @@ if compare_legacy:   # compare G predictions with NIST legacy data
 if lit_compare:
 
     ### load fit results
+    sim_data = sim_dict['sim']
     if calc=='Mean':
         print('\nCalculating fit parameters as the mean of the simulation values.\n')
         sim_results = [np.mean(sim_data, axis=0), np.std(sim_data, axis=0)]
@@ -687,5 +650,30 @@ if scrap:
     # # plt.xscale('log')
     # plt.yscale('log')
     # plt.legend()
+
+
+if plot_Gsup:
+
+    p_sup =    np.array([0,    0.05, 0.10, 0.25,   0.50,  1.0])  
+    GS =       np.array([0.86, 0.88, 0.9,  0.96,   1.09,  1.49]); sigma_GS =     np.array([0.06, 0.07, 0.06, 0.07, 0.07, 0.08])   # pW/K
+    alphaS =   np.array([0.16, 0.16, 0.14, 0.01,  -0.02, -0.39]); sigma_alphaS = np.array([0.16, 0.16, 0.16, 0.16, 0.15, 0.13])
+    chisq =    np.array([293,  279,  279,  281,    281,   279])
+    red_chisq = np.array([1.7, 1.6,  1.7,  1.6,    1.9,   2.6])
+
+
+    fig, ax1 = plt.subplots(figsize=(8,6))
+    ax1.errorbar(p_sup*100, GS, yerr=sigma_GS, marker='o', capsize=2)
+    ax1.set_xlabel('$\\%$ G Suppression'); ax1.set_ylabel('G$_S$ [pW/K]')
+    ax2 = ax1.twinx() 
+    ax2.errorbar(p_sup*100, alphaS, yerr=sigma_alphaS, color='C1', marker='o', capsize=2)
+    ax2.set_ylabel('$\\alpha_S$')
+
+    fig, ax1 = plt.subplots(figsize=(8,6))
+    ax1.plot(p_sup*100, chisq, marker='o')
+    ax1.set_xlabel('$\\%$ G Suppression'); ax1.set_ylabel('Chi-squared')
+    ax2 = ax1.twinx() 
+    ax2.plot(p_sup*100, red_chisq, marker='o', color='C1')
+    ax2.set_ylabel('Reduced Chi-squared')
+
 
 plt.show()
